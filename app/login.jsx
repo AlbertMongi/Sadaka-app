@@ -1,105 +1,149 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ImageBackground } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  SafeAreaView,
+  Alert,
+  Animated,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 export default function Login() {
   const router = useRouter();
 
-  const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [buttonOpacity] = React.useState(new Animated.Value(1));
 
   const handleLogin = () => {
-    console.log('Phone:', phone, 'Password:', password);
+    Alert.alert('Success', 'You are logged in!');
+    console.log('Logged in:', { phoneNumber });
+
+    // Redirect after login
+    router.push('index1');
+  };
+
+  const onPressIn = () => {
+    Animated.timing(buttonOpacity, {
+      toValue: 0.7,
+      duration: 100,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const onPressOut = () => {
+    Animated.timing(buttonOpacity, {
+      toValue: 1,
+      duration: 100,
+      useNativeDriver: true,
+    }).start();
   };
 
   return (
-    <ImageBackground
-      source={{ uri: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470' }}
-      style={styles.container}
-    >
-      {/* Overlay */}
-      <View style={styles.overlay} />
-
-      <View style={styles.topTextContainer}>
-        <Text style={styles.welcomeText}>WELCOME TO SADAKA APP</Text>
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.title}>Welcome Back</Text>
+        <Text style={styles.subtitle}>Please log in to continue</Text>
       </View>
 
-      <View style={styles.formContainer}>
+      {/* Form Inputs */}
+      <View style={styles.form}>
         <TextInput
           placeholder="Phone Number"
-          placeholderTextColor="rgba(255,215,0,0.7)"
+          placeholderTextColor="#FFA54F"
           style={styles.input}
-          value={phone}
-          onChangeText={setPhone}
+          value={phoneNumber}
+          onChangeText={setPhoneNumber}
           keyboardType="phone-pad"
         />
-        <TextInput
-          placeholder="Password"
-          placeholderTextColor="rgba(255,215,0,0.7)"
-          secureTextEntry
-          style={styles.input}
-          value={password}
-          onChangeText={setPassword}
-        />
 
-        <TouchableOpacity style={styles.button} onPress={handleLogin}>
-          <Text style={styles.buttonText}>LOGIN</Text>
-        </TouchableOpacity>
+        {/* Login Button */}
+        <Animated.View style={{ width: '80%', opacity: buttonOpacity }}>
+          <TouchableOpacity
+            activeOpacity={0.9}
+            style={[
+              styles.button,
+              { backgroundColor: phoneNumber ? '#FF8C00' : '#e0c8a3' },
+            ]}
+            disabled={!phoneNumber}
+            onPress={handleLogin}
+            onPressIn={onPressIn}
+            onPressOut={onPressOut}
+          >
+            <Text style={styles.buttonText}>Login</Text>
+            <Ionicons name="log-in-outline" size={18} color="#fff" style={{ marginLeft: 6 }} />
+          </TouchableOpacity>
+        </Animated.View>
 
-        <TouchableOpacity onPress={() => router.push('/register')}>
-          <Text style={styles.registerText}>Don't have an account? Register</Text>
+        {/* Register Link */}
+        <TouchableOpacity onPress={() => router.push('register')}>
+          <Text style={styles.registerLink}>
+            Don't have an account? <Text style={{color: '#FF8C00'}}>Register</Text>
+          </Text>
         </TouchableOpacity>
       </View>
-    </ImageBackground>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    zIndex: 0,
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  topTextContainer: { alignItems: 'center', paddingHorizontal: 20, marginBottom: 30 },
-  welcomeText: {
-    color: 'gold',
-    fontSize: 22,
-    fontFamily: 'Cursive',
-    textAlign: 'center',
-    textShadowColor: '#00000088',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 4,
+  header: {
+    marginBottom: 30,
+    alignItems: 'center',
   },
-  formContainer: { width: '85%', alignItems: 'center', zIndex: 1 },
-  input: {
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#FF8C00',
+  },
+  subtitle: {
+    fontSize: 13,
+    color: '#666',
+    marginTop: 6,
+  },
+  form: {
     width: '100%',
-    paddingVertical: 12,
-    paddingHorizontal: 18,
-    borderRadius: 40,
-    borderWidth: 2,
-    borderColor: 'gold',
-    marginBottom: 18,
-    color: 'gold',
-    fontSize: 14,
-    fontFamily: 'Cursive',
-    backgroundColor: 'rgba(255,215,0,0.15)',
+    alignItems: 'center',
   },
-  button: {
-    backgroundColor: 'transparent',
-    paddingVertical: 12,
-    paddingHorizontal: 36,
-    borderRadius: 40,
-    borderWidth: 2,
-    borderColor: 'gold',
+  input: {
+    width: '80%',
+    height: 42,
+    borderWidth: 1,
+    borderColor: '#FF8C00',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    fontSize: 14,
+    color: '#333',
     marginBottom: 12,
   },
-  buttonText: { color: 'gold', fontSize: 16, fontFamily: 'Cursive', fontWeight: 'bold', textAlign: 'center' },
-  registerText: {
-    color: 'gold',
-    fontSize: 12,
-    fontFamily: 'Cursive',
+  button: {
+    flexDirection: 'row',
+    width: '100%',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  buttonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  registerLink: {
+    color: '#FF8C00',
+    fontSize: 13,
     textAlign: 'center',
-    textDecorationLine: 'underline',
   },
 });
