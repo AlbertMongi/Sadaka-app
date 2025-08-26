@@ -33,7 +33,7 @@ export default function GetStarted() {
         {/* Get Started Button */}
         <TouchableOpacity
           style={styles.button}
-          onPress={() => router.push('/login')}
+          onPress={() => router.push('/register')}
         >
           <Text style={styles.buttonText}>Get Started</Text>
           <Ionicons name="arrow-forward" size={18} color="#fff" style={{ marginLeft: 6 }} />

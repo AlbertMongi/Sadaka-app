@@ -1,4 +1,348 @@
-import React, { useState } from 'react';
+// import React, { useState, useEffect, useRef } from 'react';
+// import {
+//   View,
+//   Text,
+//   StyleSheet,
+//   TextInput,
+//   FlatList,
+//   ScrollView,
+//   Image,
+//   TouchableOpacity,
+//   ActivityIndicator,
+//   Platform,
+//   Dimensions,
+// } from 'react-native';
+// import { Ionicons } from '@expo/vector-icons';
+// import { useRouter } from 'expo-router';
+
+// const GOLD = '#FFA500';
+// const FALLBACK_IMAGE =
+//   'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?auto=format&fit=crop&w=64&q=80';
+// const { width } = Dimensions.get('window');
+
+// export default function Community() {
+//   const router = useRouter();
+//   const scrollRef = useRef();
+//   const [searchText, setSearchText] = useState('');
+//   const [popularCommunities, setPopularCommunities] = useState([]);
+//   const [allCommunities, setAllCommunities] = useState([]);
+//   const [myCommunities, setMyCommunities] = useState([]);
+//   const [loading, setLoading] = useState(false);
+//   const [activeTab, setActiveTab] = useState('my');
+//   const [error, setError] = useState(null);
+
+//   const getHost = () =>
+//     Platform.OS === 'android' ? 'http://192.168.100.24:8000' : 'http://192.168.100.24:8000';
+
+//   useEffect(() => {
+//     const fetchCommunities = async () => {
+//       try {
+//         setLoading(true);
+
+//         // Fetch all communities
+//         const allResponse = await fetch(`${getHost()}/api/communities`);
+//         if (!allResponse.ok) {
+//           console.error('All communities fetch failed:', allResponse.status, allResponse.statusText);
+//           throw new Error(`All communities fetch failed: ${allResponse.status}`);
+//         }
+//         const allResult = await allResponse.json();
+//         const allData = Array.isArray(allResult.data) ? allResult.data : [];
+
+//         setPopularCommunities(
+//           allData.slice(0, 6).map((c) => ({
+//             id: c.id.toString(),
+//             name: c.name,
+//             description: c.description || 'No description available',
+//             image: c.logo ? `${getHost()}/${c.logo}` : FALLBACK_IMAGE,
+//           }))
+//         );
+
+//         setAllCommunities(
+//           allData.map((c) => ({
+//             id: c.id.toString(),
+//             name: c.name,
+//             description: c.description || 'No description available',
+//             image: c.logo ? `${getHost()}/${c.logo}` : FALLBACK_IMAGE,
+//           }))
+//         );
+
+//         // Fetch my communities
+//         const myResponse = await fetch(`${getHost()}/api/communities/joined`);
+//         if (!myResponse.ok) {
+//           console.error('My communities fetch failed:', myResponse.status, myResponse.statusText);
+//           setMyCommunities([]);
+//         } else {
+//           const myResult = await myResponse.json();
+//           const myData = Array.isArray(myResult.data) ? myResult.data : [];
+//           setMyCommunities(
+//             myData.map((c) => ({
+//               id: c.id.toString(),
+//               name: c.name,
+//               description: c.description || 'No description available',
+//               image: c.logo ? `${getHost()}/${c.logo}` : FALLBACK_IMAGE,
+//             }))
+//           );
+//         }
+
+//         setError(null);
+//       } catch (err) {
+//         console.error('Fetch communities error:', err);
+//         setError('Failed to load communities. Please try again.');
+//         setPopularCommunities([]);
+//         setAllCommunities([]);
+//         setMyCommunities([]);
+//       } finally {
+//         setLoading(false);
+//       }
+//     };
+
+//     fetchCommunities();
+//   }, []);
+
+//   const filteredMy = myCommunities.filter((c) =>
+//     c.name.toLowerCase().includes(searchText.toLowerCase())
+//   );
+//   const filteredAll = allCommunities.filter((c) =>
+//     c.name.toLowerCase().includes(searchText.toLowerCase())
+//   );
+
+//   const handleTabPress = (tab) => {
+//     setActiveTab(tab);
+//     scrollRef.current?.scrollTo({ x: tab === 'my' ? 0 : width, animated: true });
+//   };
+
+//   const handleScroll = (event) => {
+//     const xOffset = event.nativeEvent.contentOffset.x;
+//     setActiveTab(xOffset < width / 2 ? 'my' : 'all');
+//   };
+
+//   const renderCommunityItem = ({ item }) => (
+//     <TouchableOpacity
+//       style={styles.communityItem}
+//       onPress={() => router.push({ pathname: '/CommunityDetail', params: { communityId: item.id } })}
+//       activeOpacity={0.7}
+//     >
+//       <Image source={{ uri: item.image }} style={styles.communityImage} />
+//       <View style={styles.communityDetails}>
+//         <Text style={styles.communityTitle}>{item.name}</Text>
+//         <Text style={styles.communityDescription}>{item.description}</Text>
+//       </View>
+//     </TouchableOpacity>
+//   );
+
+//   if (loading) {
+//     return (
+//       <View style={[styles.container, styles.center]}>
+//         <ActivityIndicator size="large" color={GOLD} />
+//       </View>
+//     );
+//   }
+
+//   return (
+//     <View style={styles.container}>
+//       {/* Header */}
+//       <View style={styles.header}>
+//         <TouchableOpacity onPress={() => router.back()}>
+//           <Ionicons name="arrow-back-outline" size={26} color={GOLD} />
+//         </TouchableOpacity>
+//         <Text style={styles.headerTitle}>Communities</Text>
+//         <TouchableOpacity onPress={() => router.push('/notification')}>
+//           <Ionicons name="notifications-outline" size={26} color={GOLD} />
+//         </TouchableOpacity>
+//       </View>
+
+//       {/* Search */}
+//       <View style={styles.searchContainer}>
+//         <Ionicons name="search-outline" size={16} color="#888" style={styles.searchIcon} />
+//         <TextInput
+//           placeholder="Search for a community"
+//           style={styles.searchInput}
+//           value={searchText}
+//           onChangeText={setSearchText}
+//           autoCorrect={false}
+//           autoCapitalize="none"
+//           clearButtonMode="while-editing"
+//         />
+//         <TouchableOpacity onPress={() => router.push('JoinGroup')}>
+//           <Ionicons name="add-circle-outline" size={24} color={GOLD} />
+//         </TouchableOpacity>
+//       </View>
+
+//       {error && <Text style={styles.errorText}>{error}</Text>}
+
+//       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+//         {/* Popular Communities */}
+//         <Text style={styles.sectionTitle}>Popular Communities</Text>
+//         <FlatList
+//           data={popularCommunities}
+//           horizontal
+//           keyExtractor={(item) => item.id}
+//           showsHorizontalScrollIndicator={false}
+//           renderItem={({ item }) => (
+//             <TouchableOpacity
+//               style={styles.popularItem}
+//               onPress={() => router.push({ pathname: '/CommunityDetail', params: { communityId: item.id } })}
+//               activeOpacity={0.7}
+//             >
+//               <Image source={{ uri: item.image }} style={styles.circularImage} />
+//               <Text style={styles.popularText}>{item.name}</Text>
+//             </TouchableOpacity>
+//           )}
+//           contentContainerStyle={styles.popularList}
+//         />
+
+//         {/* Tabs */}
+//         <View style={styles.tabs}>
+//           <TouchableOpacity onPress={() => handleTabPress('my')}>
+//             <Text
+//               style={[
+//                 styles.tabText,
+//                 activeTab === 'my' ? styles.activeTab : styles.inactiveTab,
+//               ]}
+//             >
+//               My Communities
+//             </Text>
+//           </TouchableOpacity>
+//           <TouchableOpacity onPress={() => handleTabPress('all')}>
+//             <Text
+//               style={[
+//                 styles.tabText,
+//                 activeTab === 'all' ? styles.activeTab : styles.inactiveTab,
+//               ]}
+//             >
+//               All Communities
+//             </Text>
+//           </TouchableOpacity>
+//         </View>
+
+//         {/* Horizontal Slider */}
+//         <ScrollView
+//           ref={scrollRef}
+//           horizontal
+//           pagingEnabled
+//           showsHorizontalScrollIndicator={false}
+//           onScroll={handleScroll}
+//           scrollEventThrottle={16}
+//         >
+//           <View style={{ width }}>
+//             <FlatList
+//               data={filteredMy}
+//               keyExtractor={(item) => item.id}
+//               renderItem={renderCommunityItem}
+//               contentContainerStyle={{ paddingBottom: 40, paddingTop: 8 }}
+//               ListEmptyComponent={
+//                 <Text style={styles.noCommunitiesText}>No communities found</Text>
+//               }
+//             />
+//           </View>
+//           <View style={{ width }}>
+//             <FlatList
+//               data={filteredAll}
+//               keyExtractor={(item) => item.id}
+//               renderItem={renderCommunityItem}
+//               contentContainerStyle={{ paddingBottom: 40, paddingTop: 8 }}
+//               ListEmptyComponent={
+//                 <Text style={styles.noCommunitiesText}>No communities found</Text>
+//               }
+//             />
+//           </View>
+//         </ScrollView>
+//       </ScrollView>
+//     </View>
+//   );
+// }
+
+// const styles = StyleSheet.create({
+//   container: { flex: 1, backgroundColor: '#fff', paddingHorizontal: 16, paddingTop: 50 },
+//   center: { justifyContent: 'center', alignItems: 'center' },
+//   header: {
+//     flexDirection: 'row',
+//     justifyContent: 'space-between',
+//     alignItems: 'center',
+//     marginBottom: 15,
+//   },
+//   headerTitle: { fontSize: 16, fontWeight: 'bold', color: '#000' },
+//   searchContainer: {
+//     flexDirection: 'row',
+//     alignItems: 'center',
+//     backgroundColor: '#F5F5F5',
+//     borderRadius: 12,
+//     paddingHorizontal: 8,
+//     paddingVertical: 4,
+//     marginBottom: 8,
+//   },
+//   searchIcon: { marginRight: 6 },
+//   searchInput: { flex: 1, height: 30, fontSize: 14 },
+//   scrollContent: { paddingBottom: 40 },
+//   sectionTitle: {
+//     fontSize: 14,
+//     fontWeight: 'bold',
+//     marginBottom: 8,
+//     color: '#333',
+//     marginTop: 10,
+//   },
+//   popularList: { paddingBottom: 10 },
+//   popularItem: { marginRight: 12, alignItems: 'center', padding: 4 },
+//   circularImage: {
+//     width: 65,
+//     height: 65,
+//     borderRadius: 32.5,
+//     borderWidth: 1,
+//     borderColor: GOLD,
+//   },
+//   popularText: { fontSize: 11, textAlign: 'center', color: '#555', marginTop: 4 },
+//   tabs: {
+//     flexDirection: 'row',
+//     justifyContent: 'center',
+//     marginBottom: 10,
+//   },
+//   tabText: {
+//     fontSize: 14,
+//     fontWeight: '600',
+//     marginHorizontal: 16,
+//   },
+//   activeTab: {
+//     color: GOLD,
+//     borderBottomWidth: 2,
+//     borderColor: GOLD,
+//     paddingBottom: 4,
+//   },
+//   inactiveTab: {
+//     color: '#888',
+//     paddingBottom: 4,
+//   },
+//   communityItem: {
+//     flexDirection: 'row',
+//     alignItems: 'center',
+//     backgroundColor: '#FFF',
+//     borderRadius: 10,
+//     paddingHorizontal: 12,
+//     paddingVertical: 8,
+//     marginBottom: 12,
+//     marginRight: 12,
+//     shadowColor: '#000',
+//     shadowOffset: { width: 0, height: 1 },
+//     shadowOpacity: 0.05,
+//     shadowRadius: 3,
+//     elevation: 2,
+//   },
+//   communityImage: {
+//     width: 46,
+//     height: 46,
+//     borderRadius: 23,
+//     borderWidth: 1,
+//     borderColor: GOLD,
+//     marginRight: 12,
+//   },
+//   communityDetails: { flex: 1 },
+//   communityTitle: { fontSize: 13.5, fontWeight: 'bold', color: '#000' },
+//   communityDescription: { fontSize: 12, color: '#555', marginTop: 2 },
+//   noCommunitiesText: { textAlign: 'center', color: '#888', marginTop: 15, fontSize: 12 },
+//   errorText: { textAlign: 'center', color: 'red', marginBottom: 10 },
+// });
+
+
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,36 +352,160 @@ import {
   ScrollView,
   Image,
   TouchableOpacity,
+  ActivityIndicator,
+  Platform,
   Dimensions,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 const GOLD = '#FFA500';
-const screenWidth = Dimensions.get('window').width;
-
-const popularCommunities = [
-  { id: '1', name: 'Man of Victory', image: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470' },
-  { id: '2', name: 'Charismatic', image: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470' },
-  { id: '3', name: 'Women of Grace', image: 'https://cdn.pixabay.com/photo/2016/03/31/14/43/teddy-bear-1292199_1280.jpg' },
-  { id: '4', name: 'The Bridge', image: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470' },
-];
-
-const allCommunities = [
-  { id: '1', name: 'Open door greeters', description: 'Making newcomers feel welcome and integrated.' },
-  { id: '2', name: 'Young Vine Disciples', description: 'Nurturing the growth of young adults in their faith.' },
-  { id: '3', name: 'Crossroads Crusaders', description: 'Finding faith and fellowship through sports and recreation.' },
-  { id: '4', name: 'Silver Saints', description: 'A vibrant group for active seniors to connect and grow.' },
-  { id: '5', name: 'The Cornerstone Fellowship', description: 'Fellowship and spiritual growth for all ages.' },
-];
+const FALLBACK_IMAGE =
+  'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?auto=format&fit=crop&w=64&q=80';
+const { width } = Dimensions.get('window');
 
 export default function Community() {
   const router = useRouter();
+  const scrollRef = useRef();
   const [searchText, setSearchText] = useState('');
+  const [popularCommunities, setPopularCommunities] = useState([]);
+  const [allCommunities, setAllCommunities] = useState([]);
+  const [myCommunities, setMyCommunities] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('my');
+  const [error, setError] = useState(null);
+  const [token, setToken] = useState(null);
 
-  const filteredCommunities = allCommunities.filter((community) =>
-    community.name.toLowerCase().includes(searchText.toLowerCase())
+  const getHost = () =>
+    Platform.OS === 'android' ? 'http://192.168.100.24:8000' : 'http://192.168.100.24:8000';
+
+  useEffect(() => {
+    // Load token from AsyncStorage on mount
+    const loadToken = async () => {
+      try {
+        const savedToken = await AsyncStorage.getItem('userToken');
+        if (savedToken) {
+          setToken(savedToken);
+        } else {
+          setError('User token not found. Please login again.');
+        }
+      } catch (e) {
+        setError('Failed to load token. Please login again.');
+      }
+    };
+
+    loadToken();
+  }, []);
+
+  useEffect(() => {
+    if (!token) return; // Don't fetch communities if no token
+
+    const fetchCommunities = async () => {
+      try {
+        setLoading(true);
+
+        const headers = {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`, // Attach token here
+        };
+
+        // Fetch all communities
+        const allResponse = await fetch(`${getHost()}/api/communities`, { headers });
+        if (!allResponse.ok) {
+          throw new Error(`All communities fetch failed: ${allResponse.status}`);
+        }
+        const allResult = await allResponse.json();
+        const allData = Array.isArray(allResult.data) ? allResult.data : [];
+
+        setPopularCommunities(
+          allData.slice(0, 6).map((c) => ({
+            id: c.id.toString(),
+            name: c.name,
+            description: c.description || 'No description available',
+            image: c.logo ? `${getHost()}/${c.logo}` : FALLBACK_IMAGE,
+          }))
+        );
+
+        setAllCommunities(
+          allData.map((c) => ({
+            id: c.id.toString(),
+            name: c.name,
+            description: c.description || 'No description available',
+            image: c.logo ? `${getHost()}/${c.logo}` : FALLBACK_IMAGE,
+          }))
+        );
+
+        // Fetch my communities
+        const myResponse = await fetch(`${getHost()}/api/communities/joined`, { headers });
+        if (!myResponse.ok) {
+          setMyCommunities([]);
+        } else {
+          const myResult = await myResponse.json();
+          const myData = Array.isArray(myResult.data) ? myResult.data : [];
+          setMyCommunities(
+            myData.map((c) => ({
+              id: c.id.toString(),
+              name: c.name,
+              description: c.description || 'No description available',
+              image: c.logo ? `${getHost()}/${c.logo}` : FALLBACK_IMAGE,
+            }))
+          );
+        }
+
+        setError(null);
+      } catch (err) {
+        console.error('Fetch communities error:', err);
+        setError('Failed to load communities. Please try again.');
+        setPopularCommunities([]);
+        setAllCommunities([]);
+        setMyCommunities([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCommunities();
+  }, [token]);
+
+  const filteredMy = myCommunities.filter((c) =>
+    c.name.toLowerCase().includes(searchText.toLowerCase())
   );
+  const filteredAll = allCommunities.filter((c) =>
+    c.name.toLowerCase().includes(searchText.toLowerCase())
+  );
+
+  const handleTabPress = (tab) => {
+    setActiveTab(tab);
+    scrollRef.current?.scrollTo({ x: tab === 'my' ? 0 : width, animated: true });
+  };
+
+  const handleScroll = (event) => {
+    const xOffset = event.nativeEvent.contentOffset.x;
+    setActiveTab(xOffset < width / 2 ? 'my' : 'all');
+  };
+
+  const renderCommunityItem = ({ item }) => (
+    <TouchableOpacity
+      style={styles.communityItem}
+      onPress={() => router.push({ pathname: '/CommunityDetail', params: { communityId: item.id } })}
+      activeOpacity={0.7}
+    >
+      <Image source={{ uri: item.image }} style={styles.communityImage} />
+      <View style={styles.communityDetails}>
+        <Text style={styles.communityTitle}>{item.name}</Text>
+        <Text style={styles.communityDescription}>{item.description}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <ActivityIndicator size="large" color={GOLD} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -52,7 +520,7 @@ export default function Community() {
         </TouchableOpacity>
       </View>
 
-      {/* Search Bar */}
+      {/* Search */}
       <View style={styles.searchContainer}>
         <Ionicons name="search-outline" size={16} color="#888" style={styles.searchIcon} />
         <TextInput
@@ -69,17 +537,11 @@ export default function Community() {
         </TouchableOpacity>
       </View>
 
-      {/* Create Community Button */}
-      <TouchableOpacity
-        style={styles.createButton}
-        onPress={() => router.push('CreateCommunity')}
-      >
-        <Text style={styles.createButtonText}>Create Community</Text>
-      </TouchableOpacity>
+      {error && <Text style={styles.errorText}>{error}</Text>}
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Popular Communities */}
-        <Text style={styles.sectionTitle}>Popular communities</Text>
+        <Text style={styles.sectionTitle}>Popular Communities</Text>
         <FlatList
           data={popularCommunities}
           horizontal
@@ -88,66 +550,87 @@ export default function Community() {
           renderItem={({ item }) => (
             <TouchableOpacity
               style={styles.popularItem}
-              onPress={() => router.push('/description')}
+              onPress={() => router.push({ pathname: '/CommunityDetail', params: { communityId: item.id } })}
               activeOpacity={0.7}
             >
-              <Image
-                source={{ uri: item.image }}
-                style={styles.circularImage}
-                onError={(e) => console.log('Image failed to load', e.nativeEvent.error)}
-              />
+              <Image source={{ uri: item.image }} style={styles.circularImage} />
               <Text style={styles.popularText}>{item.name}</Text>
             </TouchableOpacity>
           )}
           contentContainerStyle={styles.popularList}
         />
 
-        {/* All Communities */}
-        <Text style={styles.sectionTitle}>All communities</Text>
-        {filteredCommunities.length === 0 ? (
-          <Text style={styles.noCommunitiesText}>No communities found</Text>
-        ) : (
-          filteredCommunities.map((community) => (
-            <TouchableOpacity
-              key={community.id}
-              style={styles.allItem}
-              onPress={() => router.push('/description')}
-              activeOpacity={0.7}
+        {/* Tabs */}
+        <View style={styles.tabs}>
+          <TouchableOpacity onPress={() => handleTabPress('my')}>
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === 'my' ? styles.activeTab : styles.inactiveTab,
+              ]}
             >
-              <Image
-                source={{ uri: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470' }}
-                style={styles.smallCircularImage}
-              />
-              <View style={styles.communityDetails}>
-                <Text style={styles.allTitle}>{community.name}</Text>
-                <Text style={styles.allDesc}>{community.description}</Text>
-              </View>
-            </TouchableOpacity>
-          ))
-        )}
+              My Communities
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => handleTabPress('all')}>
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === 'all' ? styles.activeTab : styles.inactiveTab,
+              ]}
+            >
+              All Communities
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Horizontal Slider */}
+        <ScrollView
+          ref={scrollRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+        >
+          <View style={{ width }}>
+            <FlatList
+              data={filteredMy}
+              keyExtractor={(item) => item.id}
+              renderItem={renderCommunityItem}
+              contentContainerStyle={{ paddingBottom: 40, paddingTop: 8 }}
+              ListEmptyComponent={
+                <Text style={styles.noCommunitiesText}>No communities found</Text>
+              }
+            />
+          </View>
+          <View style={{ width }}>
+            <FlatList
+              data={filteredAll}
+              keyExtractor={(item) => item.id}
+              renderItem={renderCommunityItem}
+              contentContainerStyle={{ paddingBottom: 40, paddingTop: 8 }}
+              ListEmptyComponent={
+                <Text style={styles.noCommunitiesText}>No communities found</Text>
+              }
+            />
+          </View>
+        </ScrollView>
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    paddingHorizontal: 16,
-    paddingTop: 50,
-  },
+  container: { flex: 1, backgroundColor: '#fff', paddingHorizontal: 16, paddingTop: 50 },
+  center: { justifyContent: 'center', alignItems: 'center' },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 15,
   },
-  headerTitle: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#000',
-  },
+  headerTitle: { fontSize: 16, fontWeight: 'bold', color: '#000' },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -157,45 +640,18 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     marginBottom: 8,
   },
-  searchIcon: {
-    marginRight: 6,
-  },
-  searchInput: {
-    flex: 1,
-    height: 30,
-    fontSize: 13,
-  },
-  createButton: {
-    backgroundColor: GOLD,
-    paddingVertical: 8,
-    borderRadius: 20,
-    alignItems: 'center',
-    marginBottom: 15,
-    marginHorizontal: 4,
-  },
-  createButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  scrollContent: {
-    paddingBottom: 70,
-  },
+  searchIcon: { marginRight: 6 },
+  searchInput: { flex: 1, height: 30, fontSize: 14 },
+  scrollContent: { paddingBottom: 40 },
   sectionTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: 'bold',
     marginBottom: 8,
     color: '#333',
+    marginTop: 10,
   },
-  popularList: {
-    paddingHorizontal: 0,
-    paddingBottom: 10,
-  },
-  popularItem: {
-    marginRight: 12,
-    alignItems: 'center',
-    padding: 4,
-  },
+  popularList: { paddingBottom: 10 },
+  popularItem: { marginRight: 12, alignItems: 'center', padding: 4 },
   circularImage: {
     width: 65,
     height: 65,
@@ -203,45 +659,53 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: GOLD,
   },
-  popularText: {
-    fontSize: 10,
-    textAlign: 'center',
-    color: '#555',
-    marginTop: 4,
-  },
-  allItem: {
+  popularText: { fontSize: 11, textAlign: 'center', color: '#555', marginTop: 4 },
+  tabs: {
     flexDirection: 'row',
-    marginBottom: 12,
-    alignItems: 'center',
-    paddingVertical: 8,
-    backgroundColor: '#F9F9F9',
-    borderRadius: 10,
-    paddingHorizontal: 10,
+    justifyContent: 'center',
+    marginBottom: 10,
   },
-  smallCircularImage: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  tabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginHorizontal: 16,
+  },
+  activeTab: {
+    color: GOLD,
+    borderBottomWidth: 2,
+    borderColor: GOLD,
+    paddingBottom: 4,
+  },
+  inactiveTab: {
+    color: '#888',
+    paddingBottom: 4,
+  },
+  communityItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 12,
+    marginRight: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  communityImage: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     borderWidth: 1,
     borderColor: GOLD,
-    marginRight: 10,
+    marginRight: 12,
   },
-  communityDetails: {
-    flex: 1,
-  },
-  allTitle: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#000',
-  },
-  allDesc: {
-    fontSize: 10,
-    color: '#555',
-  },
-  noCommunitiesText: {
-    textAlign: 'center',
-    color: '#888',
-    marginTop: 15,
-    fontSize: 11,
-  },
+  communityDetails: { flex: 1 },
+  communityTitle: { fontSize: 13.5, fontWeight: 'bold', color: '#000' },
+  communityDescription: { fontSize: 12, color: '#555', marginTop: 2 },
+  noCommunitiesText: { textAlign: 'center', color: '#888', marginTop: 15, fontSize: 12 },
+  errorText: { textAlign: 'center', color: 'red', marginBottom: 10 },
 });

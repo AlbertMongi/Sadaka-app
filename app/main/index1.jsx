@@ -1,28 +1,47 @@
-import React, { useState, useRef } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  Image,
-  Dimensions,
-  StyleSheet,
-  TouchableOpacity,
-} from 'react-native';
-import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { useRef, useState } from 'react';
+import {
+  Dimensions,
+  Image,
+  Linking,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import YoutubePlayer from 'react-native-youtube-iframe';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
+const GOLD = '#FFA500';
 
 export default function HomeScreen() {
   const router = useRouter();
   const scrollRef = useRef(null);
+
+  const [language, setLanguage] = useState('en'); // 'en' or 'sw'
+  const toggleLanguage = () => setLanguage((prev) => (prev === 'en' ? 'sw' : 'en'));
+
   const [activeTab, setActiveTab] = useState('Today');
 
   const getGreeting = () => {
     const hour = new Date().getHours();
-    if (hour < 12) return 'GOOD MORNING, ALBERT';
-    if (hour < 18) return 'GOOD AFTERNOON, ALBERT';
-    return 'GOOD EVENING';
+    if (language === 'sw') {
+      if (hour < 12) return 'HABARI ZA ASUBUHI';
+      if (hour < 18) return 'HABARI ZA MCHANA, ALBERT';
+      return 'HABARI ZA JIONI';
+    } else {
+      if (hour < 12) return 'GOOD MORNING';
+      if (hour < 18) return 'GOOD AFTERNOON, ALBERT';
+      return 'GOOD EVENING';
+    }
+  };
+
+  const labels = {
+    en: { today: 'Today', sermons: 'Sermons', events: 'Upcoming Events' },
+    sw: { today: 'Leo', sermons: 'Mahubiri', events: 'Matukio Yanayokuja' },
   };
 
   const wordOfDay = [
@@ -37,11 +56,23 @@ export default function HomeScreen() {
   const sermons = [
     {
       title: 'Lent',
-      img: 'https://images.unsplash.com/photo-1500534314209-a25ddb2bd429',
+      videoId: 'dQw4w9WgXcQ',
+      img: 'https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
     },
     {
-      title: 'Lent',
-      img: 'https://images.unsplash.com/photo-1500534314209-a25ddb2bd429',
+      title: 'Faith',
+      videoId: 'ysz5S6PUM-U',
+      img: 'https://img.youtube.com/vi/ysz5S6PUM-U/hqdefault.jpg',
+    },
+        {
+      title: 'Faith',
+      videoId: 'ysz5S6PUM-U',
+      img: 'https://img.youtube.com/vi/ysz5S6PUM-U/hqdefault.jpg',
+    },
+        {
+      title: 'Faith',
+      videoId: 'ysz5S6PUM-U',
+      img: 'https://img.youtube.com/vi/ysz5S6PUM-U/hqdefault.jpg',
     },
   ];
 
@@ -55,223 +86,142 @@ export default function HomeScreen() {
     },
     {
       id: 2,
-      name: 'Youth Fellowship',
+      name: 'Worship Night',
       img: 'https://i.pravatar.cc/100?img=2',
-      time: '5:00 PM',
-      location: 'Room 202',
+      time: '7:00 PM',
+      location: 'Main Hall',
     },
     {
-      id: 3,
-      name: 'Bible Study',
-      img: 'https://i.pravatar.cc/100?img=3',
-      time: '7:00 PM',
-      location: 'Library',
+      id: 1,
+      name: 'Pastor preaching',
+      img: 'https://i.pravatar.cc/100?img=1',
+      time: '10:00 AM',
+      location: 'Main Hall',
+    },
+    {
+      id: 1,
+      name: 'Pastor preaching',
+      img: 'https://i.pravatar.cc/100?img=1',
+      time: '10:00 AM',
+      location: 'Main Hall',
     },
   ];
 
-  const onTabPress = (tab) => {
-    setActiveTab(tab);
-    scrollRef.current.scrollTo({ x: tab === 'Today' ? 0 : width, animated: true });
-  };
-
-  const onScroll = (event) => {
-    const x = event.nativeEvent.contentOffset.x;
-    setActiveTab(x >= width / 2 ? 'Community' : 'Today');
-  };
-
-  // COMMUNITY PAGE
-  const CommunityPage = () => {
-    const [communities] = useState([
-      {
-        id: '1',
-        name: 'Youth Group',
-        description: 'Engaging youth in fellowship and worship.',
-        img: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=64&q=80',
-        enabled: true,
-      },
-      {
-        id: '2',
-        name: 'Bible Study',
-        description: 'Dive deep into the scriptures every week.',
-        img: 'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?auto=format&fit=crop&w=64&q=80',
-        enabled: false,
-      },
-      {
-        id: '3',
-        name: 'Choir',
-        description: 'Lifting voices in praise and worship.',
-        img: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=64&q=80',
-        enabled: true,
-      },
-      {
-        id: '4',
-        name: 'Prayer Warriors',
-        description: 'Dedicated to continuous prayer for the church.',
-        img: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=64&q=80',
-        enabled: false,
-      },
-    ]);
-
-    const followedCommunities = communities.filter((community) => community.enabled);
-
-    return (
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Choose a community to switch</Text>
-        <View style={{ paddingHorizontal: 16, marginTop: 8 }}>
-          {followedCommunities.map((item) => (
-            <View key={item.id} style={styles.eventCardVertical}>
-              <Image source={{ uri: item.img }} style={styles.eventImageVertical} />
-              <View style={styles.eventInfoVertical}>
-                <Text style={styles.eventName}>{item.name}</Text>
-                <Text style={styles.eventLocation}>{item.description}</Text>
-              </View>
-            </View>
-          ))}
-          {followedCommunities.length === 0 && (
-            <Text style={{ textAlign: 'center', color: '#888', marginTop: 20 }}>
-              You have not followed any communities yet.
-            </Text>
-          )}
-        </View>
-      </View>
-    );
-  };
-
   return (
     <View style={styles.container}>
-      <View style={styles.customHeader}>
-        <View style={styles.navBar}>
-          <View style={styles.tabs}>
-            <TouchableOpacity onPress={() => onTabPress('Today')}>
-              <Text style={[styles.tabText, activeTab === 'Today' ? styles.tabActive : styles.tabInactive]}>
-                Today
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => onTabPress('Community')}>
-              <Text style={[styles.tabText, activeTab === 'Community' ? styles.tabActive : styles.tabInactive]}>
-                Community
-              </Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.icons}>
-            <TouchableOpacity onPress={() => router.push('/notification')} style={styles.iconTouchable}>
-              <Ionicons name="notifications-outline" size={20} color="gold" />
-            </TouchableOpacity>
-          </View>
-        </View>
-        <View style={styles.greetingRow}>
-          <Ionicons name="sunny-outline" size={16} color="#888" />
-          <Text style={styles.greetingText}> {getGreeting()}</Text>
-        </View>
-      </View>
-
       <ScrollView
-        ref={scrollRef}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
-        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 20, minHeight: height }}
       >
-        {/* TODAY TAB */}
-        <ScrollView
-          style={{ width, backgroundColor: '#fff' }}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 40 }}
-        >
-          {/* Word of the Day */}
-          <View style={styles.section}>
-            <ScrollView
-              horizontal
-              pagingEnabled
-              snapToInterval={width - 48}
-              decelerationRate="fast"
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingLeft: 16, paddingRight: 16, marginTop: 12 }}
-            >
-              {wordOfDay.map((item, index) => (
-                <View
-                  key={index}
-                  style={[
-                    styles.wordCard,
-                    { marginRight: index !== wordOfDay.length - 1 ? 16 : 0 },
-                  ]}
-                >
-                  <Image source={{ uri: item.img }} style={styles.wordImage} resizeMode="cover" />
-                  <View style={styles.wordOverlay} />
-                  <View style={styles.wordContent}>
-                    <Text style={styles.verseRef}>{item.ref}</Text>
-                    <Text style={styles.verseText}>{item.verse}</Text>
-                  </View>
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-
-          {/* Sermons */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Sermons</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 16, marginTop: 8 }}
-            >
-              {sermons.map((sermon, i) => (
-                <TouchableOpacity
-                  key={i}
-                  style={styles.sermonCard}
-                  activeOpacity={0.8}
-                  onPress={() => router.push({ pathname: 'sermon', params: { title: sermon.title } })}
-                >
-                  <Image source={{ uri: sermon.img }} style={styles.sermonImage} />
-                  <View style={styles.sermonOverlay}>
-                    <Text style={styles.sermonTitle}>{sermon.title}</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-
-          {/* Upcoming Events */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Upcoming Events</Text>
-            <View style={{ paddingHorizontal: 16, marginTop: 8, paddingBottom: 40 }}>
-              {upcomingEvents.map((event) => (
-                <TouchableOpacity
-                  key={event.id}
-                  style={styles.eventCardVertical}
-                  activeOpacity={0.8}
-                  onPress={() => router.push({ pathname: 'events', params: { name: event.name } })}
-                >
-                  <Image source={{ uri: event.img }} style={styles.eventImageVertical} />
-                  <View style={styles.eventInfoVertical}>
-                    <Text style={styles.eventName}>{event.name}</Text>
-                    <Text style={styles.eventTime}>{event.time}</Text>
-                    <Text style={styles.eventLocation}>{event.location}</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
+        {/* Header */}
+        <View style={styles.customHeader}>
+          <View style={styles.navBar}>
+            <View style={styles.tabs}>
+              <Text style={[styles.tabText, styles.tabActive]}>
+                {labels[language].today}
+              </Text>
+              <TouchableOpacity onPress={() => router.push('/#')} style={{ marginLeft: 8 }}>
+                <Ionicons name="person-circle-outline" size={24} color={GOLD} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.icons}>
+              <TouchableOpacity onPress={toggleLanguage} style={styles.iconTouchable}>
+                <Ionicons name="globe-outline" size={20} color={GOLD} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => router.push('/notification')} style={styles.iconTouchable}>
+                <Ionicons name="notifications-outline" size={20} color={GOLD} />
+              </TouchableOpacity>
             </View>
           </View>
-        </ScrollView>
+          <View style={styles.greetingRow}>
+            <Ionicons name="sunny-outline" size={16} color="#888" />
+            <Text style={styles.greetingText}> {getGreeting()}</Text>
+          </View>
+        </View>
 
-        {/* COMMUNITY TAB */}
-        <ScrollView
-          style={{ width, backgroundColor: '#fff' }}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 40 }}
-        >
-          <CommunityPage />
-        </ScrollView>
+        {/* Word of the Day */}
+        <View style={styles.section}>
+          <ScrollView
+            horizontal
+            pagingEnabled
+            snapToInterval={width - 48}
+            decelerationRate="fast"
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingLeft: 16, paddingRight: 16, marginTop: 12 }}
+          >
+            {wordOfDay.map((item, index) => (
+              <View
+                key={index}
+                style={[styles.wordCard, { marginRight: index !== wordOfDay.length - 1 ? 16 : 0 }]}
+              >
+                <Image source={{ uri: item.img }} style={styles.wordImage} resizeMode="cover" />
+                <View style={styles.wordOverlay} />
+                <View style={styles.wordContent}>
+                  <Text style={styles.verseRef}>{item.ref}</Text>
+                  <Text style={styles.verseText}>{item.verse}</Text>
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+
+        {/* Sermons */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{labels[language].sermons}</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: 16, marginTop: 8 }}
+          >
+            {sermons.map((sermon, i) => (
+              <View key={i} style={styles.sermonCard}>
+                {Platform.OS === 'android' || Platform.OS === 'ios' ? (
+                  <YoutubePlayer height={70} play={false} videoId={sermon.videoId} />
+                ) : (
+                  <TouchableOpacity
+                    onPress={() => Linking.openURL(`https://www.youtube.com/watch?v=${sermon.videoId}`)}
+                    style={{ flex: 1 }}
+                  >
+                    <Image source={{ uri: sermon.img }} style={styles.sermonImage} />
+                    <View style={styles.sermonOverlay}>
+                      <Text style={styles.sermonTitle}>{sermon.title}</Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+
+        {/* Events */}
+        <View style={[styles.section, { paddingBottom: 20 }]}>
+          <Text style={styles.sectionTitle}>{labels[language].events}</Text>
+          <View style={{ paddingHorizontal: 16, marginTop: 8 }}>
+            {upcomingEvents.map((event) => (
+              <TouchableOpacity
+                key={event.id}
+                style={styles.eventCardVertical}
+                activeOpacity={0.8}
+                onPress={() => router.push({ pathname: 'events', params: { name: event.name } })}
+              >
+                <Image source={{ uri: event.img }} style={styles.eventImageVertical} />
+                <View style={styles.eventInfoVertical}>
+                  <Text style={styles.eventName}>{event.name}</Text>
+                  <Text style={styles.eventTime}>{event.time}</Text>
+                  <Text style={styles.eventLocation}>{event.location}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
       </ScrollView>
     </View>
   );
 }
+// === Styles ===
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff', paddingTop: 15 },
-
   customHeader: {
     backgroundColor: '#fff',
     paddingTop: 12,
@@ -284,9 +234,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   tabs: { flexDirection: 'row', alignItems: 'center' },
-  tabText: { fontSize: 14, fontWeight: 'bold', marginRight: 12 },
-  tabActive: { color: 'orange' },
-  tabInactive: { color: '#999' },
+  tabText: { fontSize: 14, fontWeight: 'bold', marginRight: 4 },
+  tabActive: { color: GOLD },
   icons: { flexDirection: 'row', alignItems: 'center' },
   iconTouchable: { marginRight: 12, padding: 4, borderRadius: 6 },
 
@@ -345,6 +294,7 @@ const styles = StyleSheet.create({
     marginRight: 16,
     overflow: 'hidden',
     elevation: 4,
+    backgroundColor: '#000',
   },
   sermonImage: {
     width: '100%',
@@ -384,6 +334,8 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     marginRight: 12,
     backgroundColor: '#ccc',
+    borderWidth: 1,
+    borderColor: GOLD,
   },
   eventInfoVertical: { flex: 1 },
   eventName: {

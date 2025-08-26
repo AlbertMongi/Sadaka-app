@@ -1,90 +1,230 @@
-import React, { useState, useRef } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
 import {
-  View,
+  Animated,
+  Dimensions,
+  Keyboard,
+  Platform,
+  SafeAreaView,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
-  Alert,
-  Keyboard,
+  View,
 } from 'react-native';
+
+const { width } = Dimensions.get('window');
+
+const API_BASE_URL =
+  Constants.expoConfig?.extra?.apiBaseUrl || 'http://192.168.100.24:8000';
 
 export default function OTPVerification() {
   const OTP_LENGTH = 6;
   const [otp, setOtp] = useState(Array(OTP_LENGTH).fill(''));
   const inputs = useRef([]);
+  const router = useRouter();
 
-  // Handle text change in each OTP box
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [resendTimer, setResendTimer] = useState(0);
+  const [buttonOpacity] = useState(new Animated.Value(1));
+  const [phoneNo, setPhoneNo] = useState(null);
+
+  const { token } = useLocalSearchParams();
+
+  useEffect(() => {
+    const getPhoneNo = async () => {
+      try {
+        const storedPhoneNo = await AsyncStorage.getItem('userPhoneNo');
+        if (storedPhoneNo) setPhoneNo(storedPhoneNo);
+        else setErrorMessage('Phone number not found. Please log in again.');
+      } catch {
+        setErrorMessage('Failed to retrieve phone number.');
+      }
+    };
+    getPhoneNo();
+  }, []);
+
+  useEffect(() => {
+    let timer;
+    if (resendTimer > 0) {
+      timer = setTimeout(() => setResendTimer((prev) => prev - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [resendTimer]);
+
   const handleChangeText = (text, index) => {
     if (/^\d*$/.test(text)) {
       const newOtp = [...otp];
       newOtp[index] = text;
       setOtp(newOtp);
 
-      // Move to next input if text entered and not last input
       if (text && index < OTP_LENGTH - 1) {
-        inputs.current[index + 1].focus();
+        inputs.current[index + 1]?.focus();
+      } else if (!text && index > 0) {
+        inputs.current[index - 1]?.focus();
       }
 
-      // Move to previous input if text cleared
-      if (!text && index > 0) {
-        inputs.current[index - 1].focus();
+      if (newOtp.every((digit) => digit !== '')) {
+        handleVerify(newOtp.join(''));
       }
     }
   };
 
-  const handleVerify = () => {
-    const enteredOtp = otp.join('');
-    if (enteredOtp.length === OTP_LENGTH) {
-      Alert.alert('OTP Verified', `You entered: ${enteredOtp}`);
-      // Add your verification logic here
-    } else {
-      Alert.alert('Invalid OTP', 'Please enter the full OTP.');
+  const animateButton = (toValue) => {
+    Animated.timing(buttonOpacity, {
+      toValue,
+      duration: 100,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handleVerify = async (manualOtp) => {
+    const entered = manualOtp || otp.join('');
+    if (entered.length !== OTP_LENGTH) {
+      setErrorMessage('Please enter all 6 digits.');
+      return;
+    }
+
+    setLoading(true);
+    setErrorMessage('');
+    console.log('Verifying OTP:', entered);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/register/verify?token=${entered}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const data = await res.json();
+      console.log('API Response Status:', res.status);
+      console.log('API Response Data:', data);
+
+      if (res.ok) {
+        console.log('Storing token and navigating...');
+        await AsyncStorage.setItem('userToken', data.token);
+        router.replace('main/index1');  // Use absolute path
+      } else {
+        setErrorMessage(data.message || 'Verification failed. Please try again.');
+        console.log('Verification failed:', data.message);
+      }
+    } catch (error) {
+      console.error('Verification error:', error);
+      setErrorMessage('Network error. Please try again later.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleResend = () => {
-    Alert.alert('OTP Resent', 'A new OTP has been sent to your phone.');
-    // Add your resend OTP logic here
+  const handleResend = async () => {
+    if (resendTimer > 0 || loading) return;
+
+    if (!phoneNo) {
+      setErrorMessage('Phone number missing.');
+      return;
+    }
+
+    setLoading(true);
+    setErrorMessage('');
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/auth/resend`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phoneNo }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setErrorMessage('OTP resent successfully.');
+        setResendTimer(60);
+      } else {
+        setErrorMessage(data.message || 'Failed to resend OTP.');
+      }
+    } catch {
+      setErrorMessage('Network error. Please try again later.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <SafeAreaView style={styles.container} onTouchStart={Keyboard.dismiss}>
-      <Text style={styles.title}>Enter OTP</Text>
-      <Text style={styles.subtitle}>Please enter the 6-digit code sent to your phone</Text>
+      <View style={styles.innerWrapper}>
+        <Text style={styles.title}>Enter OTP</Text>
+        <Text style={styles.subtitle}>
+          Please enter the 6-digit code sent to your phone
+        </Text>
 
-      <View style={styles.otpContainer}>
-        {otp.map((digit, index) => (
-          <TextInput
-            key={index}
-            ref={el => (inputs.current[index] = el)}
-            style={styles.otpInput}
-            keyboardType="number-pad"
-            maxLength={1}
-            value={digit}
-            onChangeText={text => handleChangeText(text, index)}
-            returnKeyType="done"
-            textAlign="center"
-            autoFocus={index === 0}
-          />
-        ))}
+        <View style={styles.otpContainer}>
+          {otp.map((digit, idx) => (
+            <TextInput
+              key={idx}
+              ref={(el) => (inputs.current[idx] = el)}
+              style={styles.otpInput}
+              keyboardType="number-pad"
+              maxLength={1}
+              value={digit}
+              onChangeText={(text) => handleChangeText(text, idx)}
+              autoFocus={idx === 0}
+              textContentType="oneTimeCode"
+              importantForAutofill="yes"
+            />
+          ))}
+        </View>
+
+        <Animated.View style={{ width: '60%', opacity: buttonOpacity }}>
+          <TouchableOpacity
+            disabled={!otp.every(Boolean) || loading}
+            style={[
+              styles.verifyButton,
+              { backgroundColor: otp.every(Boolean) ? '#FF8C00' : '#e0c8a3' },
+            ]}
+            onPressIn={() => animateButton(0.7)}
+            onPressOut={() => animateButton(1)}
+            onPress={() => handleVerify()}
+          >
+            <Text style={styles.buttonText}>
+              {loading ? 'Verifying...' : 'Verify OTP'}
+            </Text>
+            {!loading && (
+              <Ionicons
+                name="checkmark-done-outline"
+                size={18}
+                color="#fff"
+                style={{ marginLeft: 6 }}
+              />
+            )}
+          </TouchableOpacity>
+        </Animated.View>
+
+        {errorMessage !== '' && <Text style={styles.errorText}>{errorMessage}</Text>}
+
+        <TouchableOpacity disabled={resendTimer > 0 || loading} onPress={handleResend}>
+          <Text
+            style={[
+              styles.resendText,
+              (resendTimer > 0 || loading) && {
+                color: '#aaa',
+                textDecorationLine: 'none',
+              },
+            ]}
+          >
+            {loading && !resendTimer
+              ? 'Resending...'
+              : resendTimer > 0
+              ? `Resend OTP in `
+              : 'Resend OTP'}
+            {resendTimer > 0 && (
+              <Text style={styles.timerText}>{resendTimer}s</Text>
+            )}
+          </Text>
+        </TouchableOpacity>
       </View>
-
-      <TouchableOpacity
-        style={[
-          styles.verifyButton,
-          { backgroundColor: otp.every(d => d !== '') ? '#FF8C00' : '#e0c8a3' },
-        ]}
-        disabled={!otp.every(d => d !== '')}
-        onPress={handleVerify}
-      >
-        <Text style={styles.verifyButtonText}>Verify OTP</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity onPress={handleResend}>
-        <Text style={styles.resendText}>Resend OTP</Text>
-      </TouchableOpacity>
     </SafeAreaView>
   );
 }
@@ -93,8 +233,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
-    paddingHorizontal: 24,
+    paddingHorizontal: '5%',
     justifyContent: 'center',
+  },
+  innerWrapper: {
     alignItems: 'center',
   },
   title: {
@@ -102,43 +244,63 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FF8C00',
     marginBottom: 8,
+    textAlign: 'center',
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#666',
     marginBottom: 32,
     textAlign: 'center',
   },
   otpContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '80%',
+    justifyContent: 'space-evenly',
+    width: '100%',
     marginBottom: 32,
+    paddingHorizontal: 10,
   },
   otpInput: {
-    width: 40,
-    height: 50,
+    width: width * 0.11,
+    height: width * 0.13,
     borderWidth: 1,
     borderColor: '#FF8C00',
     borderRadius: 8,
-    fontSize: 24,
+    fontSize: 22,
     color: '#333',
+    textAlign: 'center',
+    paddingVertical: 8,
   },
   verifyButton: {
-    width: '80%',
-    paddingVertical: 14,
-    borderRadius: 10,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+    borderRadius: 10,
     marginBottom: 16,
+    width: '100%',
   },
-  verifyButtonText: {
+  buttonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
   },
   resendText: {
     color: '#FF8C00',
     fontSize: 14,
     textDecorationLine: 'underline',
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  timerText: {
+    color: '#FF8C00',
+    fontWeight: 'bold',
+  },
+  errorText: {
+    color: '#FF8C00',
+    marginBottom: 10,
+    fontSize: 13,
+    fontWeight: '500',
+    textAlign: 'center',
+    paddingHorizontal: 10,
   },
 });

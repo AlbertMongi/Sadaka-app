@@ -37,13 +37,13 @@ export default function DescriptionScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header with Back Arrow */}
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#FFA500" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Community Info</Text>
-        <View style={{ width: 24 }} /> {/* Placeholder for layout balance */}
+        <View style={{ width: 24 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -59,7 +59,7 @@ export default function DescriptionScreen() {
           <Text style={styles.cardText}>{community.description}</Text>
         </View>
 
-        {/* Formed Date */}
+        {/* Formed */}
         <View style={styles.infoCard}>
           <Text style={styles.cardTitle}>Formed</Text>
           <Text style={styles.cardText}>{community.formedDate}</Text>
@@ -71,7 +71,7 @@ export default function DescriptionScreen() {
           <Text style={styles.cardText}>{community.location}</Text>
         </View>
 
-        {/* Other Information */}
+        {/* Other Info */}
         <View style={styles.infoCard}>
           <Text style={styles.cardTitle}>Other Information</Text>
           <Text style={styles.cardText}>{community.otherInfo}</Text>
@@ -91,7 +91,7 @@ export default function DescriptionScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff', // White background
+    backgroundColor: '#fff', // Page background
   },
   header: {
     flexDirection: 'row',
@@ -107,13 +107,14 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 16, // Slightly increased
+    fontWeight: 'bold',
     color: '#000',
   },
   scrollContent: {
     padding: 20,
     paddingBottom: 100,
+    backgroundColor: '#fff',
   },
   cardRow: {
     flexDirection: 'row',
@@ -136,8 +137,8 @@ const styles = StyleSheet.create({
     marginRight: 16,
   },
   name: {
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 16, // Slightly increased
+    fontWeight: 'bold',
     color: '#000',
     flexShrink: 1,
   },
@@ -154,15 +155,15 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
   },
   cardTitle: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 14, // Slightly increased
+    fontWeight: 'bold',
     marginBottom: 6,
     color: '#000',
   },
   cardText: {
-    fontSize: 15,
+    fontSize: 13, // Slightly increased
     color: '#444',
-    lineHeight: 22,
+    lineHeight: 20,
   },
   buttonContainer: {
     position: 'absolute',
@@ -182,8 +183,8 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   leaveButtonText: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: 'bold',
     color: '#fff',
     letterSpacing: 0.8,
   },

@@ -17,14 +17,18 @@ export default function Layout() {
           let iconName;
           let IconComponent = Ionicons;
 
-          if (route.name === 'index1') iconName = 'home-outline';
-          else if (route.name === 'bible') {
+          if (route.name === 'index1') {
+            iconName = 'home-outline';
+          } else if (route.name === 'bible') {
             IconComponent = MaterialCommunityIcons;
-            iconName = 'book-open-page-variant';
+            iconName = 'calendar';
           } else if (route.name === 'contribution') {
             IconComponent = MaterialCommunityIcons;
             iconName = 'hand-heart-outline';
-          } else if (route.name === 'community') iconName = 'people-outline';
+          } else if (route.name === 'community') {
+            IconComponent = MaterialCommunityIcons;
+            iconName = 'account-group-outline'; // three people icon
+          }
 
           if (focused) {
             return (
