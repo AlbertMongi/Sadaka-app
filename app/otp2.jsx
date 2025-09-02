@@ -29,27 +29,27 @@ export default function OTPVerification() {
 
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [resendTimer, setResendTimer] = useState(60); // Start with 60s countdown
+  const [resendTimer, setResendTimer] = useState(0);
   const [buttonOpacity] = useState(new Animated.Value(1));
   const [phoneNo, setPhoneNo] = useState(null);
 
   const { token } = useLocalSearchParams();
 
-  // Load stored phone number
   useEffect(() => {
     const getPhoneNo = async () => {
       try {
         const storedPhoneNo = await AsyncStorage.getItem('userPhoneNo');
+        console.log('Retrieved phone number:', storedPhoneNo);
         if (storedPhoneNo) setPhoneNo(storedPhoneNo);
         else setErrorMessage('Phone number not found. Please log in again.');
-      } catch {
+      } catch (error) {
+        console.error('Failed to retrieve phone number:', error);
         setErrorMessage('Failed to retrieve phone number.');
       }
     };
     getPhoneNo();
   }, []);
 
-  // Start resend timer countdown
   useEffect(() => {
     let timer;
     if (resendTimer > 0) {
@@ -96,24 +96,25 @@ export default function OTPVerification() {
     console.log('Verifying OTP:', entered);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/register/verify?token=${entered}`, {
+      const res = await fetch(`${API_BASE_URL}/api/user/verify?token=${entered}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
 
-      const data = await res.json();
+      const json = await res.json();
       console.log('API Response Status:', res.status);
-      console.log('API Response Data:', data);
+      console.log('API Response Data:', json);
 
-      if (res.ok && data?.data?.token) {
-        const token = data.data.token;
-
+      if (res.ok && json.success) {
+        // The token is inside json.data.token according to your API response
+        const userToken = json.data.token;
         console.log('Storing token and navigating...');
-        await AsyncStorage.setItem('userToken', token);
+        await AsyncStorage.setItem('userToken', userToken);
+        console.log('Token stored successfully:', userToken);
         router.replace('/main/index1');
       } else {
-        console.error('Token missing or verification failed');
-        setErrorMessage(data?.message || 'Verification failed. Please try again.');
+        setErrorMessage(json.message || 'Verification failed. Please try again.');
+        console.log('Verification failed:', json.message);
       }
     } catch (error) {
       console.error('Verification error:', error);
@@ -142,14 +143,18 @@ export default function OTPVerification() {
       });
 
       const data = await res.json();
+      console.log('Resend OTP Response Status:', res.status);
+      console.log('Resend OTP Response Data:', data);
 
-      if (res.ok) {
+      if (res.ok && data.success) {
         setErrorMessage('OTP resent successfully.');
-        setResendTimer(60); // Restart countdown
+        setResendTimer(60);
       } else {
-        setErrorMessage(data?.message || 'Failed to resend OTP.');
+        setErrorMessage(data.message || 'Failed to resend OTP.');
+        console.log('Resend OTP failed:', data.message);
       }
-    } catch {
+    } catch (error) {
+      console.error('Resend OTP error:', error);
       setErrorMessage('Network error. Please try again later.');
     } finally {
       setLoading(false);
@@ -160,9 +165,7 @@ export default function OTPVerification() {
     <SafeAreaView style={styles.container} onTouchStart={Keyboard.dismiss}>
       <View style={styles.innerWrapper}>
         <Text style={styles.title}>Enter OTP</Text>
-        <Text style={styles.subtitle}>
-          Please enter the 6-digit code sent to your phone
-        </Text>
+        <Text style={styles.subtitle}>Please enter the 6-digit code sent to your phone</Text>
 
         <View style={styles.otpContainer}>
           {otp.map((digit, idx) => (
@@ -192,31 +195,33 @@ export default function OTPVerification() {
             onPressOut={() => animateButton(1)}
             onPress={() => handleVerify()}
           >
-            <Text style={styles.buttonText}>
-              {loading ? 'Verifying...' : 'Verify OTP'}
-            </Text>
+            <Text style={styles.buttonText}>{loading ? 'Verifying...' : 'Verify OTP'}</Text>
             {!loading && (
-              <Ionicons
-                name="checkmark-done-outline"
-                size={18}
-                color="#fff"
-                style={{ marginLeft: 6 }}
-              />
+              <Ionicons name="checkmark-done-outline" size={18} color="#fff" style={{ marginLeft: 6 }} />
             )}
           </TouchableOpacity>
         </Animated.View>
 
         {errorMessage !== '' && <Text style={styles.errorText}>{errorMessage}</Text>}
 
-        {resendTimer > 0 ? (
-          <Text style={styles.resendText}>
-            Resend OTP in <Text style={styles.timerText}>{resendTimer}s</Text>
+        <TouchableOpacity disabled={resendTimer > 0 || loading} onPress={handleResend}>
+          <Text
+            style={[
+              styles.resendText,
+              (resendTimer > 0 || loading) && {
+                color: '#aaa',
+                textDecorationLine: 'none',
+              },
+            ]}
+          >
+            {loading && !resendTimer
+              ? 'Resending...'
+              : resendTimer > 0
+              ? `Resend OTP in `
+              : 'Resend OTP'}
+            {resendTimer > 0 && <Text style={styles.timerText}>{resendTimer}s</Text>}
           </Text>
-        ) : (
-          <TouchableOpacity onPress={handleResend}>
-            <Text style={styles.resendText}>Resend OTP</Text>
-          </TouchableOpacity>
-        )}
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );

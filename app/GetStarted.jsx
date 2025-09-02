@@ -4,94 +4,90 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  ImageBackground,
   FlatList,
   Image,
-  Dimensions
+  Dimensions,
+  SafeAreaView,
+  StatusBar,
 } from 'react-native';
-
 
 const { width } = Dimensions.get('window');
 
-const IMAGES = [
-  { id: '1', uri: 'https://cdn.pixabay.com/photo/2016/03/31/14/43/teddy-bear-1292199_1280.jpg' },
-  { id: '2', uri: 'https://cdn.pixabay.com/photo/2017/02/23/13/05/bear-2093207_1280.jpg' },
-  { id: '3', uri: 'https://cdn.pixabay.com/photo/2018/10/22/18/13/teddy-3766389_1280.jpg' },
-];
+// const IMAGES = [
+//   { id: '1', uri: 'https://images.pexels.com/photos/1666816/pexels-photo-1666816.jpeg' },
+//   { id: '2', uri: 'https://images.pexels.com/photos/1666816/pexels-photo-1666816.jpeg' },
+//   { id: '3', uri: 'https://images.pexels.com/photos/1666816/pexels-photo-1666816.jpeg' },
+// ];
 
 export default function GetStarted({ navigation }) {
   const flatListRef = useRef(null);
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // Slide images automatically
   useEffect(() => {
     const interval = setInterval(() => {
       const nextIndex = (currentIndex + 1) % IMAGES.length;
       setCurrentIndex(nextIndex);
       flatListRef.current?.scrollToIndex({ index: nextIndex, animated: true });
-    }, 3000); // every 3 seconds
+    }, 3000);
 
     return () => clearInterval(interval);
   }, [currentIndex]);
 
   return (
-    <ImageBackground
-      source={{ uri: 'https://images.unsplash.com/photo-1590073242668-90f8a8db7e7e' }}
-      style={styles.container}
-    >
-      <View style={styles.overlay} />
+    <View style={styles.root}>
+      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
-      <View style={styles.topContent}>
-        <Text style={styles.welcomeText}>Welcome to Sadaka!</Text>
-        <FlatList
-          ref={flatListRef}
-          data={IMAGES}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <Image source={{ uri: item.uri }} style={styles.characterImage} />
-          )}
-        />
-      </View>
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.topContent}>
+          <Text style={styles.welcomeText}>Welcome to Sadaka!</Text>
+          <FlatList
+            ref={flatListRef}
+            data={IMAGES}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <Image source={{ uri: item.uri }} style={styles.characterImage} />
+            )}
+          />
+        </View>
 
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity
-          style={styles.button}
-          onPress={() => navigation.navigate('main/Index1')}
-        >
-          <Text style={styles.buttonText}>GET STARTED</Text>
-        </TouchableOpacity>
-      </View>
-    </ImageBackground>
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={() => navigation.navigate('main/Index1')}
+          >
+            <Text style={styles.buttonText}>GET STARTED</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
+    flex: 1,
+    backgroundColor: '#fff', // ✅ White background
+  },
+  safeArea: {
     flex: 1,
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    zIndex: 0,
-  },
   topContent: {
-    marginTop: 60,
+    marginTop: 40,
     alignItems: 'center',
-    zIndex: 1,
   },
   welcomeText: {
     color: '#FF69B4',
     fontSize: 20,
     fontFamily: 'Comic Sans MS',
     textAlign: 'center',
-    textShadowColor: '#00000055',
+    textShadowColor: '#00000020',
     textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
+    textShadowRadius: 2,
     marginBottom: 15,
   },
   characterImage: {
@@ -104,19 +100,18 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     paddingBottom: 30,
-    zIndex: 1,
   },
   button: {
     backgroundColor: '#FFB6C1',
-    paddingVertical: 8,
-    width: '100%',
+    paddingVertical: 10,
+    width: '80%',
     borderRadius: 25,
     borderWidth: 2,
     borderColor: '#FF69B4',
   },
   buttonText: {
     color: '#FF1493',
-    fontSize: 14,
+    fontSize: 16,
     fontFamily: 'Comic Sans MS',
     fontWeight: 'bold',
     textAlign: 'center',

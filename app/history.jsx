@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,62 +11,56 @@ import {
   Platform,
   Modal,
   Pressable,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native'; // <-- added
-
-const transactions = [
-  {
-    id: '1',
-    date: '10',
-    month: 'Aug',
-    title: 'Payment Received',
-    description: 'Received payment for event booking',
-    amount: 120,
-    type: 'Credit',
-    status: 'Completed',
-  },
-  {
-    id: '2',
-    date: '08',
-    month: 'Aug',
-    title: 'Booking Refund',
-    description: 'Refund issued for canceled booking',
-    amount: -50,
-    type: 'Debit',
-    status: 'Pending',
-  },
-  {
-    id: '3',
-    date: '05',
-    month: 'Aug',
-    title: 'Subscription Payment',
-    description: 'Monthly subscription for premium access',
-    amount: -30,
-    type: 'Debit',
-    status: 'Completed',
-  },
-  {
-    id: '4',
-    date: '01',
-    month: 'Aug',
-    title: 'Bonus Credit',
-    description: 'Referral bonus credited to your account',
-    amount: 20,
-    type: 'Credit',
-    status: 'Completed',
-  },
-];
+import { useNavigation } from '@react-navigation/native';
 
 export default function TransactionHistory() {
+  const [transactions, setTransactions] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTxn, setSelectedTxn] = useState(null);
-  const navigation = useNavigation(); // <-- used for going back
+  const [loading, setLoading] = useState(false);
+  const navigation = useNavigation();
+
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch('http://192.168.100.24:8000/api/contributions/user');
+        const json = await response.json();
+
+        if (json.success && Array.isArray(json.data)) {
+          const mapped = json.data.map(item => {
+            const dateObj = new Date(); // Replace with actual timestamp if available
+            return {
+              id: item.id,
+              date: String(dateObj.getDate()).padStart(2, '0'),
+              month: dateObj.toLocaleString('default', { month: 'short' }),
+              title: 'Contribution',
+              description: item.purpose || 'No purpose given',
+              amount: item.amount,
+              type: 'Credit',
+              status: 'Completed',
+            };
+          });
+          setTransactions(mapped);
+        } else {
+          Alert.alert('Error', json.message || 'Failed to load transactions.');
+        }
+      } catch (error) {
+        Alert.alert('Error', 'Could not fetch data. Please check your connection.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTransactions();
+  }, []);
 
   const filteredTransactions = transactions.filter(txn =>
-    `${txn.title} ${txn.description}`
-      .toLowerCase()
-      .includes(searchTerm.toLowerCase())
+    `${txn.title} ${txn.description}`.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const closeModal = () => setSelectedTxn(null);
@@ -78,16 +72,16 @@ export default function TransactionHistory() {
         style={{ flex: 1 }}
       >
         <View style={styles.container}>
-          {/* Header with Back Arrow */}
+          {/* Header */}
           <View style={styles.header}>
             <TouchableOpacity onPress={() => navigation.goBack()}>
               <Ionicons name="arrow-back" size={24} color="#FF8C00" />
             </TouchableOpacity>
             <Text style={styles.headerText}>Transaction History</Text>
-            <View style={{ width: 24 }} /> {/* Placeholder for spacing */}
+            <View style={{ width: 24 }} />
           </View>
 
-          {/* Search Bar */}
+          {/* Search */}
           <View style={styles.searchContainer}>
             <Ionicons name="search" size={18} color="#999" style={styles.searchIcon} />
             <TextInput
@@ -99,45 +93,46 @@ export default function TransactionHistory() {
             />
           </View>
 
-          {/* Transaction List */}
-          <FlatList
-            data={filteredTransactions}
-            keyExtractor={item => item.id}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 40 }}
-            ListEmptyComponent={
-              <Text style={styles.noResults}>No transactions found.</Text>
-            }
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.card}
-                onPress={() => setSelectedTxn(item)}
-              >
-                <View style={styles.dateBadge}>
-                  <Text style={styles.dateText}>{item.date}</Text>
-                  <Text style={styles.monthText}>{item.month}</Text>
-                </View>
-                <View style={styles.info}>
-                  <Text style={styles.title}>{item.title}</Text>
-                  <Text style={styles.description}>{item.description}</Text>
-                  <Text style={styles.type}>{item.type}</Text>
-                  <Text style={styles.status}>Status: {item.status}</Text>
-                </View>
-                <View style={styles.amountContainer}>
-                  <Text
-                    style={[
-                      styles.amount,
-                      { color: item.amount >= 0 ? '#0a8a00' : '#d32f2f' },
-                    ]}
-                  >
-                    {item.amount >= 0 ? '+' : '-'}Tz{Math.abs(item.amount)}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            )}
-          />
+          {/* Loader */}
+          {loading ? (
+            <ActivityIndicator size="large" color="#FF8C00" style={{ marginTop: 20 }} />
+          ) : (
+            <FlatList
+              data={filteredTransactions}
+              keyExtractor={item => item.id}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 40 }}
+              ListEmptyComponent={
+                <Text style={styles.noResults}>No transactions found.</Text>
+              }
+              renderItem={({ item }) => (
+                <TouchableOpacity style={styles.card} onPress={() => setSelectedTxn(item)}>
+                  <View style={styles.dateBadge}>
+                    <Text style={styles.dateText}>{item.date}</Text>
+                    <Text style={styles.monthText}>{item.month}</Text>
+                  </View>
+                  <View style={styles.info}>
+                    <Text style={styles.title}>{item.title}</Text>
+                    <Text style={styles.description}>{item.description}</Text>
+                    <Text style={styles.type}>{item.type}</Text>
+                    <Text style={styles.status}>Status: {item.status}</Text>
+                  </View>
+                  <View style={styles.amountContainer}>
+                    <Text
+                      style={[
+                        styles.amount,
+                        { color: item.amount >= 0 ? '#0a8a00' : '#d32f2f' },
+                      ]}
+                    >
+                      {item.amount >= 0 ? '+' : '-'}Tz{Math.abs(item.amount)}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+            />
+          )}
 
-          {/* Modal for transaction details */}
+          {/* Modal */}
           <Modal
             visible={!!selectedTxn}
             animationType="slide"
@@ -181,6 +176,7 @@ export default function TransactionHistory() {
     </SafeAreaView>
   );
 }
+
 
 const styles = StyleSheet.create({
   safeContainer: {

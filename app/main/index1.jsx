@@ -1,134 +1,306 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useRef, useState } from 'react';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import React, { useEffect, useRef, useState } from 'react';
+import { BASE_URL } from '../apiConfig'; // ✅ Correct path
+
 import {
+  ActivityIndicator,
   Dimensions,
   Image,
-  Linking,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  Modal,
+  FlatList,
+  TouchableWithoutFeedback,
 } from 'react-native';
-import YoutubePlayer from 'react-native-youtube-iframe';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 
 const { width, height } = Dimensions.get('window');
 const GOLD = '#FFA500';
+const FALLBACK_IMAGE = 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTb_oySS2-AZYC97VkAwMB1NKY1Wm1qHy_CeQ&s';
 
 export default function HomeScreen() {
   const router = useRouter();
   const scrollRef = useRef(null);
 
-  const [language, setLanguage] = useState('en'); // 'en' or 'sw'
+  const [language, setLanguage] = useState('en');
+  const [user, setUser] = useState(null);
+  const [scripture, setScripture] = useState(null);
+  const [sermons, setSermons] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [loadingScripture, setLoadingScripture] = useState(true);
+  const [loadingSermons, setLoadingSermons] = useState(true);
+  const [loadingEvents, setLoadingEvents] = useState(true);
+  const [loadingUser, setLoadingUser] = useState(true);
+  const [loadingCommunities, setLoadingCommunities] = useState(true);
+  const [joinedCommunities, setJoinedCommunities] = useState([]);
+  const [selectedCommunityId, setSelectedCommunityId] = useState(null);
+  const [dropdownVisible, setDropdownVisible] = useState(false);
+  
+
+  const labels = {
+    en: {  sermons: 'Sermons', events: 'Upcoming Events' },
+    sw: {  sermons: 'Mahubiri', events: 'Matukio Yanayokuja' },
+  };
+
   const toggleLanguage = () => setLanguage((prev) => (prev === 'en' ? 'sw' : 'en'));
 
-  const [activeTab, setActiveTab] = useState('Today');
+  async function fetchWithToken(url) {
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) throw new Error('No token found');
+
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+
+      const json = await res.json();
+      return json;
+    } catch (error) {
+      console.error('Fetch error:', error);
+      return null;
+    }
+  }
+
+
+const fetchJoinedCommunities = async () => {
+  setLoadingCommunities(true);
+  try {
+    const res = await fetchWithToken(`${BASE_URL}/communities/joined`);
+
+    if (res?.success && Array.isArray(res.data) && res.data.length > 0) {
+      setJoinedCommunities(res.data);
+
+      const savedCommunityId = await AsyncStorage.getItem('selectedCommunityId');
+      const matchedCommunity = savedCommunityId
+        ? res.data.find((c) => c.id.toString() === savedCommunityId)
+        : null;
+
+      if (matchedCommunity) {
+        setSelectedCommunityId(parseInt(savedCommunityId, 10));
+      } else {
+        setSelectedCommunityId(null);
+        await AsyncStorage.removeItem('selectedCommunityId');
+      }
+    } else {
+      // No communities joined
+      setJoinedCommunities([]);
+      setSelectedCommunityId(null);
+      await AsyncStorage.removeItem('selectedCommunityId');
+    }
+  } catch (error) {
+    console.error('Error fetching joined communities:', error);
+    setSelectedCommunityId(null);
+  } finally {
+    setLoadingCommunities(false);
+  }
+};
+
+const fetchData = async () => {
+  // User Profile (always fetch)
+  setLoadingUser(true);
+  const userRes = await fetchWithToken('http://192.168.100.24:8000/api/user/profile');
+  if (userRes?.success && userRes.data) {
+    setUser(userRes.data);
+  }
+  setLoadingUser(false);
+
+  // Scripture - allow general fetch if no community selected
+  setLoadingScripture(true);
+  try {
+    const scriptureUrl = selectedCommunityId
+      ? `${BASE_URL}/scriptures/user/${selectedCommunityId}`
+      : `${BASE_URL}/scriptures/user/`;
+
+    const scriptureRes = await fetchWithToken(scriptureUrl);
+
+    if (scriptureRes?.success && scriptureRes.data?.length) {
+      const apiScripture = scriptureRes.data[0];
+      const scriptureData = {
+        label: "Verse of the Day",
+        verse_reference: apiScripture.name,
+        verse_text: apiScripture.description,
+        imageUrl: apiScripture.photo || FALLBACK_IMAGE,
+      };
+      setScripture(scriptureData);
+    } else {
+      setScripture(null);
+    }
+  } catch (error) {
+    console.error('Failed to fetch scripture:', error);
+    setScripture(null);
+  } finally {
+    setLoadingScripture(false);
+  }
+
+  // Sermons - allow general fetch if no community selected
+  setLoadingSermons(true);
+  const sermonsUrl = selectedCommunityId
+    ? `${BASE_URL}/sermons/user/${selectedCommunityId}`
+    : `${BASE_URL}/sermons/user/`;
+
+  const sermonsRes = await fetchWithToken(sermonsUrl);
+  if (sermonsRes?.success && Array.isArray(sermonsRes.data)) {
+    setSermons(
+      sermonsRes.data.map((sermon) => ({
+        id: sermon.id,
+        title: sermon.name,
+        imageUrl: sermon.photo || 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTb_oySS2-AZYC97VkAwMB1NKY1Wm1qHy_CeQ&s',
+      }))
+    );
+  } else {
+    setSermons([]);
+  }
+  setLoadingSermons(false);
+
+  // Events - only fetch if community is selected
+  setLoadingEvents(true);
+  if (selectedCommunityId) {
+    const eventsRes = await fetchWithToken(
+      `http://192.168.100.24:8000/api/events/upcoming/${selectedCommunityId}`
+    );
+    if (eventsRes?.success && Array.isArray(eventsRes.data)) {
+      setEvents(
+        eventsRes.data.map((event) => ({
+          ...event,
+          imageUrl: event.imageUrl || 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTb_oySS2-AZYC97VkAwMB1NKY1Wm1qHy_CeQ&s',
+        }))
+      );
+    } else {
+      setEvents([]);
+    }
+  } else {
+    console.warn("No community selected. Skipping upcoming events fetch.");
+    setEvents([]); // Or keep previous events
+  }
+  setLoadingEvents(false);
+};
+
+// Use effects
+useEffect(() => {
+  fetchJoinedCommunities();
+}, []);
+
+useEffect(() => {
+  fetchData(); // Always run fetchData, even if no community is selected
+}, [selectedCommunityId]);
+
+const onSelectCommunity = async (communityId) => {
+  setDropdownVisible(false);
+  if (communityId !== selectedCommunityId) {
+    setSelectedCommunityId(communityId);
+    await AsyncStorage.setItem('selectedCommunityId', communityId.toString());
+  }
+};
+
 
   const getGreeting = () => {
     const hour = new Date().getHours();
+    const firstName = user?.firstName || user?.name?.split(' ')[0] || '';
+
     if (language === 'sw') {
-      if (hour < 12) return 'HABARI ZA ASUBUHI';
-      if (hour < 18) return 'HABARI ZA MCHANA, ALBERT';
-      return 'HABARI ZA JIONI';
+      if (hour < 12) return `HABARI ZA ASUBUHI${firstName ? ', ' + firstName.toUpperCase() : ''}`;
+      if (hour < 18) return `HABARI ZA MCHANA${firstName ? ', ' + firstName.toUpperCase() : ''}`;
+      return `HABARI ZA JIONI${firstName ? ', ' + firstName.toUpperCase() : ''}`;
     } else {
-      if (hour < 12) return 'GOOD MORNING';
-      if (hour < 18) return 'GOOD AFTERNOON, ALBERT';
-      return 'GOOD EVENING';
+      if (hour < 12) return `GOOD MORNING${firstName ? ', ' + firstName : ''}`;
+      if (hour < 18) return `GOOD AFTERNOON${firstName ? ', ' + firstName : ''}`;
+      return `GOOD EVENING${firstName ? ', ' + firstName : ''}`;
     }
   };
 
-  const labels = {
-    en: { today: 'Today', sermons: 'Sermons', events: 'Upcoming Events' },
-    sw: { today: 'Leo', sermons: 'Mahubiri', events: 'Matukio Yanayokuja' },
-  };
+  const CommunityDropdown = () => (
+    <>
+      <TouchableOpacity
+        onPress={() => setDropdownVisible(!dropdownVisible)}
+        style={styles.dropdownToggle}
+      >
+        <Text style={styles.dropdownText}>
+          {joinedCommunities.find((c) => c.id === selectedCommunityId)?.name || 'Select Community'}
+        </Text>
+        <Ionicons
+          name={dropdownVisible ? 'chevron-up-outline' : 'chevron-down-outline'}
+          size={18}
+          color={GOLD}
+        />
+      </TouchableOpacity>
 
-  const wordOfDay = [
-    {
-      verse:
-        'Have I not commanded you? Be strong and courageous. Do not be afraid; do not be discouraged, for the Lord your God will be with you wherever you go.',
-      ref: 'Joshua 1:9',
-      img: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470',
-    },
-  ];
+      <Modal
+        transparent
+        visible={dropdownVisible}
+        animationType="fade"
+        onRequestClose={() => setDropdownVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setDropdownVisible(false)}>
+          <View style={styles.modalOverlay} />
+        </TouchableWithoutFeedback>
 
-  const sermons = [
-    {
-      title: 'Lent',
-      videoId: 'dQw4w9WgXcQ',
-      img: 'https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
-    },
-    {
-      title: 'Faith',
-      videoId: 'ysz5S6PUM-U',
-      img: 'https://img.youtube.com/vi/ysz5S6PUM-U/hqdefault.jpg',
-    },
-        {
-      title: 'Faith',
-      videoId: 'ysz5S6PUM-U',
-      img: 'https://img.youtube.com/vi/ysz5S6PUM-U/hqdefault.jpg',
-    },
-        {
-      title: 'Faith',
-      videoId: 'ysz5S6PUM-U',
-      img: 'https://img.youtube.com/vi/ysz5S6PUM-U/hqdefault.jpg',
-    },
-  ];
-
-  const upcomingEvents = [
-    {
-      id: 1,
-      name: 'Pastor preaching',
-      img: 'https://i.pravatar.cc/100?img=1',
-      time: '10:00 AM',
-      location: 'Main Hall',
-    },
-    {
-      id: 2,
-      name: 'Worship Night',
-      img: 'https://i.pravatar.cc/100?img=2',
-      time: '7:00 PM',
-      location: 'Main Hall',
-    },
-    {
-      id: 1,
-      name: 'Pastor preaching',
-      img: 'https://i.pravatar.cc/100?img=1',
-      time: '10:00 AM',
-      location: 'Main Hall',
-    },
-    {
-      id: 1,
-      name: 'Pastor preaching',
-      img: 'https://i.pravatar.cc/100?img=1',
-      time: '10:00 AM',
-      location: 'Main Hall',
-    },
-  ];
+        <View style={styles.dropdownListContainer}>
+          <FlatList
+            data={joinedCommunities}
+            keyExtractor={(item) => item.id.toString()}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={[
+                  styles.dropdownItem,
+                  item.id === selectedCommunityId && styles.dropdownItemSelected,
+                ]}
+                onPress={() => onSelectCommunity(item.id)}
+              >
+                <Text
+                  style={[
+                    styles.dropdownItemText,
+                    item.id === selectedCommunityId && styles.dropdownItemTextSelected,
+                  ]}
+                >
+                  {item.name}
+                </Text>
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      </Modal>
+    </>
+  );
 
   return (
     <View style={styles.container}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 20, minHeight: height }}
+        ref={scrollRef}
       >
         {/* Header */}
         <View style={styles.customHeader}>
           <View style={styles.navBar}>
             <View style={styles.tabs}>
-              <Text style={[styles.tabText, styles.tabActive]}>
-                {labels[language].today}
-              </Text>
-              <TouchableOpacity onPress={() => router.push('/#')} style={{ marginLeft: 8 }}>
-                <Ionicons name="person-circle-outline" size={24} color={GOLD} />
-              </TouchableOpacity>
+              <Text style={[styles.tabText, styles.tabActive]}>{labels[language].today}</Text>
+              <View style={styles.profileDropdownContainer}>
+                <MaterialCommunityIcons name="church" size={24} color={GOLD} />
+                {!loadingCommunities && joinedCommunities.length > 0 && <CommunityDropdown />}
+                {loadingCommunities && <ActivityIndicator size="small" color={GOLD} />}
+              </View>
             </View>
             <View style={styles.icons}>
               <TouchableOpacity onPress={toggleLanguage} style={styles.iconTouchable}>
                 <Ionicons name="globe-outline" size={20} color={GOLD} />
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => router.push('/notification')} style={styles.iconTouchable}>
+              <TouchableOpacity
+                onPress={() => router.push('/notification')}
+                style={styles.iconTouchable}
+              >
                 <Ionicons name="notifications-outline" size={20} color={GOLD} />
               </TouchableOpacity>
             </View>
@@ -139,86 +311,156 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Word of the Day */}
+        {/* Scripture of the Day */}
         <View style={styles.section}>
-          <ScrollView
-            horizontal
-            pagingEnabled
-            snapToInterval={width - 48}
-            decelerationRate="fast"
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingLeft: 16, paddingRight: 16, marginTop: 12 }}
-          >
-            {wordOfDay.map((item, index) => (
-              <View
-                key={index}
-                style={[styles.wordCard, { marginRight: index !== wordOfDay.length - 1 ? 16 : 0 }]}
-              >
-                <Image source={{ uri: item.img }} style={styles.wordImage} resizeMode="cover" />
-                <View style={styles.wordOverlay} />
-                <View style={styles.wordContent}>
-                  <Text style={styles.verseRef}>{item.ref}</Text>
-                  <Text style={styles.verseText}>{item.verse}</Text>
-                </View>
+          {loadingScripture ? (
+            <ActivityIndicator color={GOLD} style={{ marginTop: 16 }} />
+          ) : scripture ? (
+            <View style={styles.wordCard}>
+              <Image
+                source={{ uri: scripture.imageUrl }}
+                style={styles.wordImage}
+                resizeMode="cover"
+                onError={(e) => console.log('Scripture image error:', e.nativeEvent.error)}
+              />
+              <View style={styles.wordOverlay} />
+              <View style={styles.wordContent}>
+                <Text style={styles.verseRef}>{scripture.verse_reference}</Text>
+                <Text style={styles.verseText}>{scripture.verse_text}</Text>
               </View>
-            ))}
-          </ScrollView>
+            </View>
+          ) : (
+            <Text style={{ paddingHorizontal: 16, color: '#666' }}>
+              {language === 'sw' ? 'Hakuna maandiko yanayopatikana.' : 'No scripture found.'}
+            </Text>
+          )}
         </View>
 
         {/* Sermons */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{labels[language].sermons}</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 16, marginTop: 8 }}
-          >
-            {sermons.map((sermon, i) => (
-              <View key={i} style={styles.sermonCard}>
-                {Platform.OS === 'android' || Platform.OS === 'ios' ? (
-                  <YoutubePlayer height={70} play={false} videoId={sermon.videoId} />
-                ) : (
-                  <TouchableOpacity
-                    onPress={() => Linking.openURL(`https://www.youtube.com/watch?v=${sermon.videoId}`)}
-                    style={{ flex: 1 }}
-                  >
-                    <Image source={{ uri: sermon.img }} style={styles.sermonImage} />
-                    <View style={styles.sermonOverlay}>
-                      <Text style={styles.sermonTitle}>{sermon.title}</Text>
-                    </View>
-                  </TouchableOpacity>
-                )}
-              </View>
-            ))}
-          </ScrollView>
+          {loadingSermons ? (
+            <ActivityIndicator color={GOLD} style={{ marginTop: 8 }} />
+          ) : sermons.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 16, marginTop: 8 }}
+            >
+              {/* {sermons.map((sermon) => (
+                <View key={sermon.id} style={styles.sermonCard}>
+                  <Image
+                    source={{ uri: sermon.imageUrl }}
+                    style={styles.sermonImage}
+                    resizeMode="cover"
+                    onError={(e) => console.log(`Sermon image error (${sermon.title}):`, e.nativeEvent.error)}
+                  />
+                  <View style={styles.sermonOverlay}>
+                    <Text style={styles.sermonTitle}>{sermon.title}</Text>
+                    <Text style={styles.sermonDescription} numberOfLines={2}>
+                      {sermon.description}
+                    </Text>
+                  </View>
+                </View>
+              ))} */}
+              {sermons.map((sermon) => (
+  <TouchableOpacity
+    key={sermon.id}
+    style={styles.sermonCard}
+    activeOpacity={0.8}
+    onPress={() =>
+      router.push({
+        pathname: '/sermon',
+        params: { id: sermon.id }, // Pass sermon ID to detail page
+      })
+    }
+  >
+    <Image
+      source={{ uri: sermon.imageUrl }}
+      style={styles.sermonImage}
+      resizeMode="cover"
+      onError={(e) => console.log(`Sermon image error (${sermon.title}):`, e.nativeEvent.error)}
+    />
+    <View style={styles.sermonOverlay}>
+      <Text style={styles.sermonTitle}>{sermon.title}</Text>
+      <Text style={styles.sermonDescription} numberOfLines={2}>
+        
+      </Text>
+    </View>
+  </TouchableOpacity>
+))}
+
+            </ScrollView>
+          ) : (
+            <Text style={{ paddingHorizontal: 16, color: '#666' }}>
+              {language === 'sw' ? 'Hakuna mahubiri yanayopatikana.' : 'No sermons found.'}
+            </Text>
+          )}
         </View>
 
-        {/* Events */}
-        <View style={[styles.section, { paddingBottom: 20 }]}>
+        {/* Upcoming Events */}
+        <View style={[styles.section, { paddingBottom: 20, backgroundColor: '#fff' }]}>
           <Text style={styles.sectionTitle}>{labels[language].events}</Text>
-          <View style={{ paddingHorizontal: 16, marginTop: 8 }}>
-            {upcomingEvents.map((event) => (
-              <TouchableOpacity
-                key={event.id}
-                style={styles.eventCardVertical}
-                activeOpacity={0.8}
-                onPress={() => router.push({ pathname: 'events', params: { name: event.name } })}
-              >
-                <Image source={{ uri: event.img }} style={styles.eventImageVertical} />
-                <View style={styles.eventInfoVertical}>
-                  <Text style={styles.eventName}>{event.name}</Text>
-                  <Text style={styles.eventTime}>{event.time}</Text>
-                  <Text style={styles.eventLocation}>{event.location}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
+          {loadingEvents ? (
+            <ActivityIndicator color={GOLD} style={{ marginTop: 8 }} />
+          ) : events.length > 0 ? (
+            <View style={{ paddingHorizontal: 16, marginTop: 8 }}>
+              {events.map((event) => (
+                <TouchableOpacity
+                  key={event.id}
+                  style={styles.eventCardVertical}
+                  activeOpacity={0.8}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/EventDetailScreen',
+                      params: { id: event.id },
+                    })
+                  }
+                >
+                  <Image
+                    source={{ uri: event.imageUrl }}
+                    style={styles.eventImageVertical}
+                    resizeMode="cover"
+                    onError={(e) => console.log(`Event image error (${event.name || 'Unnamed'}):`, e.nativeEvent.error)}
+                  />
+                  <View style={styles.eventInfoVertical}>
+                    <Text style={styles.eventName}>{event.name || 'Unnamed Event'}</Text>
+                    <Text style={styles.eventTime}>
+  {event.eventDate
+    ? new Date(event.eventDate).toLocaleString(undefined, {
+        weekday: 'short', // e.g. "Mon"
+        month: 'short',   // e.g. "Sep"
+        day: 'numeric',   // e.g. 1
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,     // For 12-hour format like "10:30 AM"
+      })
+    : 'Time not specified'}
+</Text>
+
+                    <Text style={styles.eventLocation}>
+                      {[
+                        event.street,
+                        event.district,
+                        event.region,
+                      ]
+                        .filter(Boolean)
+                        .join(', ') || 'No location'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : (
+            <Text style={{ paddingHorizontal: 16, color: '#666' }}>
+              {language === 'sw' ? 'Hakuna matukio yanayopatikana.' : 'No events found.'}
+            </Text>
+          )}
         </View>
       </ScrollView>
     </View>
   );
 }
-// === Styles ===
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff', paddingTop: 15 },
@@ -238,10 +480,61 @@ const styles = StyleSheet.create({
   tabActive: { color: GOLD },
   icons: { flexDirection: 'row', alignItems: 'center' },
   iconTouchable: { marginRight: 12, padding: 4, borderRadius: 6 },
-
   greetingRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
   greetingText: { fontSize: 12, color: '#777', fontWeight: '600', marginLeft: 6 },
-
+  profileDropdownContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  dropdownToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: GOLD,
+    borderRadius: 6,
+  },
+  dropdownText: {
+    fontSize: 12,
+    color: GOLD,
+    marginRight: 4,
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  dropdownListContainer: {
+    position: 'absolute',
+    top: 70,
+    right: 16,
+    width: 200,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    maxHeight: 250,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  dropdownItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  dropdownItemSelected: {
+    backgroundColor: GOLD,
+  },
+  dropdownItemText: {
+    fontSize: 14,
+    color: '#222',
+  },
+  dropdownItemTextSelected: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
   section: { marginBottom: 20 },
   sectionTitle: {
     fontSize: 15,
@@ -249,20 +542,22 @@ const styles = StyleSheet.create({
     color: '#222',
     paddingHorizontal: 16,
   },
-
   wordCard: {
-    width: width - 48,
+    width: width - 32,
     height: 220,
     borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: '#fff',
-    position: 'relative',
+    marginHorizontal: 16,
+    position: 'relative', // Ensure positioning context for children
   },
   wordImage: {
-    position: 'absolute',
     width: '100%',
     height: '100%',
     borderRadius: 16,
+    position: 'absolute',
+    top: 0,
+    left: 0,
   },
   wordOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -273,6 +568,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     padding: 20,
+    position: 'relative', // Ensure content is above image and overlay
   },
   verseRef: {
     color: '#fff',
@@ -282,14 +578,13 @@ const styles = StyleSheet.create({
   },
   verseText: {
     color: '#fff',
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '400',
     lineHeight: 18,
   },
-
   sermonCard: {
     width: 110,
-    height: 70,
+    height: 80,
     borderRadius: 12,
     marginRight: 16,
     overflow: 'hidden',
@@ -302,48 +597,70 @@ const styles = StyleSheet.create({
     position: 'absolute',
   },
   sermonOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 8,
+    flex: 3,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  justifyContent: 'center',
+    paddingHorizontal: 6,
+    paddingBottom: 6,
   },
-  sermonTitle: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
+sermonTitle: {
+  color: '#fff',
+  fontSize: 11,
+  fontWeight: '600',
+  textAlign: 'center',
+  marginLeft: 'auto',
+  marginRight: 'auto',
+  display: 'block', // if it's an inline element like <span>
+},
 
+  sermonDescription: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '400',
+    marginTop: 2,
+  },
   eventCardVertical: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
     flexDirection: 'row',
-    padding: 12,
-    marginBottom: 14,
     alignItems: 'center',
-    elevation: 3,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 8,
+    marginBottom: 8,
     shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 2,
+    elevation: 1,
   },
   eventImageVertical: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 110,
+    height: 80,
+    borderRadius: 8,
     marginRight: 12,
-    backgroundColor: '#ccc',
-    borderWidth: 1,
-    borderColor: GOLD,
+    backgroundColor: '#eee',
+    // borderWidth: 1,
+    // borderColor: GOLD,
   },
-  eventInfoVertical: { flex: 1 },
+  eventInfoVertical: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    justifyContent: 'center',
+  },
   eventName: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '600',
     color: '#222',
-    marginBottom: 2,
   },
-  eventTime: { fontSize: 12, color: '#555', marginBottom: 2 },
-  eventLocation: { fontSize: 12, color: '#555' },
+  eventTime: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: GOLD,
+    marginTop: 2,
+  },
+  eventLocation: {
+    fontSize: 11,
+    color: '#666',
+    marginTop: 2,
+  },
 });

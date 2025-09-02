@@ -1,4 +1,4 @@
-import React, { useState } from 'react'; 
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,31 +11,82 @@ import {
   FlatList,
   Modal,
   TouchableWithoutFeedback,
+  Alert,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 
 export default function GiveScreen() {
   const navigation = useNavigation();
+  const router = useRouter();
+  const scrollRef = useRef(null);
 
   const [offering, setOffering] = useState('');
   const [frequency, setFrequency] = useState('One time');
   const [amount, setAmount] = useState('');
   const [location, setLocation] = useState('');
-  const [funds, setFunds] = useState([{ id: 1, value: 'General Fund' }]);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [startDate, setStartDate] = useState(new Date());
-
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('Mobile money');
   const [mobileNumber, setMobileNumber] = useState('');
   const [cardNumber, setCardNumber] = useState('');
   const [expiryDate, setExpiryDate] = useState('');
   const [cvv, setCvv] = useState('');
+  const [token, setToken] = useState(null);
+  const [joinedCommunities, setJoinedCommunities] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [funds, setFunds] = useState([{ id: 1, value: 'General Fund' }]);
 
   const frequencies = ['One time', 'Weekly', 'Monthly', 'Every two weeks'];
+
+  const getHost = () =>
+    Platform.OS === 'android' ? 'http://192.168.100.24:8000' : 'http://192.168.100.24:8000';
+
+  useEffect(() => {
+    const loadToken = async () => {
+      const savedToken = await AsyncStorage.getItem('userToken');
+      if (savedToken) setToken(savedToken);
+      else router.replace('/login');
+    };
+    loadToken();
+  }, []);
+
+  useEffect(() => {
+    if (!token) return;
+    const fetchCommunities = async () => {
+      try {
+        const res = await fetch(`${getHost()}/api/communities/joined`, {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        const json = await res.json();
+        if (res.ok && Array.isArray(json.data)) {
+          setJoinedCommunities(json.data);
+        }
+      } catch (e) {
+        console.error('Error loading communities', e);
+      }
+    };
+    fetchCommunities();
+  }, [token]);
+
+  const formatAmountWithCommas = (value) => {
+    const numericValue = value.replace(/,/g, '').replace(/[^0-9]/g, '');
+    if (!numericValue) return '';
+    return parseInt(numericValue, 10).toLocaleString('en-US');
+  };
+
+  const handleAmountChange = (value) => {
+    const formatted = formatAmountWithCommas(value);
+    setAmount(formatted);
+  };
 
   const addFund = () => {
     const newId = funds.length + 1;
@@ -48,35 +99,64 @@ export default function GiveScreen() {
     setStartDate(currentDate);
   };
 
+  const sendContribution = async () => {
+    if (!offering || !amount || !location) {
+      Alert.alert('Error', 'Please fill all required fields.');
+      return;
+    }
+
+    const rawAmount = Number(amount.replace(/,/g, ''));
+    if (isNaN(rawAmount) || rawAmount <= 0) {
+      Alert.alert('Error', 'Enter a valid amount.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const res = await fetch(`${getHost()}/api/contributions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          offerType: offering,
+          amount: rawAmount,
+          purpose: frequency,
+          phoneNo: paymentMethod === 'Mobile money' ? mobileNumber : cardNumber,
+          communityId: location,
+        }),
+      });
+
+      if (!res.ok) throw new Error('Failed to send contribution');
+      Alert.alert('Success', 'Thank you! Your contribution has been sent.');
+      setShowPaymentModal(false);
+      setAmount('');
+      setOffering('');
+      setLocation('');
+      setMobileNumber('');
+      setCardNumber('');
+      setExpiryDate('');
+      setCvv('');
+    } catch (err) {
+      console.error(err);
+      Alert.alert('Error', err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView
-        contentContainerStyle={styles.container}
-        keyboardShouldPersistTaps="handled"
-      >
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" ref={scrollRef}>
+        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={16} color="#FF8C00" />
+            <Ionicons name="arrow-back" size={20} color="#FF8C00" />
           </TouchableOpacity>
-
           <Text style={styles.headerTitle}>Give</Text>
-
           <View style={styles.headerIcons}>
-            <TouchableOpacity onPress={() => navigation.navigate('notification')}>
-              <Ionicons name="notifications-outline" size={24} color="#FF8C00" />
-            </TouchableOpacity>
-
-            <TouchableOpacity onPress={() => navigation.navigate('history')}>
-              <Ionicons
-                name="receipt-outline"
-                size={24}
-                color="#FF8C00"
-                style={{ marginLeft: 16 }}
-              />
-            </TouchableOpacity>
+            <Ionicons name="notifications-outline" size={24} color="#FF8C00" />
           </View>
         </View>
 
@@ -85,15 +165,14 @@ export default function GiveScreen() {
         <View style={styles.dropdown}>
           <Picker
             selectedValue={offering}
-            onValueChange={(value) => setOffering(value)}
+            onValueChange={(val) => setOffering(val)}
             style={styles.picker}
             dropdownIconColor="#FF8C00"
-            mode="dropdown"
           >
             <Picker.Item label="Select..." value="" />
-            <Picker.Item label="General Fund" value="General Fund" />
-            <Picker.Item label="Missions" value="Missions" />
             <Picker.Item label="Tithe" value="Tithe" />
+            <Picker.Item label="Missions" value="Missions" />
+            <Picker.Item label="General Fund" value="General Fund" />
           </Picker>
         </View>
 
@@ -102,24 +181,15 @@ export default function GiveScreen() {
         <FlatList
           data={frequencies}
           horizontal
-          keyExtractor={(item) => item}
           showsHorizontalScrollIndicator={false}
+          keyExtractor={(item) => item}
           contentContainerStyle={styles.frequencyContainer}
           renderItem={({ item }) => (
             <TouchableOpacity
-              activeOpacity={1}
-              style={[
-                styles.freqButton,
-                frequency === item && styles.freqButtonActive,
-              ]}
+              style={[styles.freqButton, frequency === item && styles.freqButtonActive]}
               onPress={() => setFrequency(item)}
             >
-              <Text
-                style={[
-                  styles.freqText,
-                  frequency === item && styles.freqTextActive,
-                ]}
-              >
+              <Text style={[styles.freqText, frequency === item && styles.freqTextActive]}>
                 {item}
               </Text>
             </TouchableOpacity>
@@ -132,219 +202,118 @@ export default function GiveScreen() {
           <TextInput
             style={styles.amount}
             value={amount}
-            onChangeText={setAmount}
+            onChangeText={handleAmountChange}
             keyboardType="numeric"
             placeholder="Enter amount"
             placeholderTextColor="#999"
           />
         </View>
 
-        {/* Date & Location */}
-        {frequency === 'Weekly' ? (
-          <View style={styles.row}>
-            <View style={[styles.inputWrapper, { marginRight: 8 }]}>
-              <Text style={styles.label}>Start date</Text>
-              <TouchableOpacity
-                style={styles.textInput}
-                onPress={() => setShowDatePicker(true)}
-              >
-                <Text style={{ color: '#000', fontSize: 12 }}>
-                  {startDate.toLocaleDateString()}
-                </Text>
-              </TouchableOpacity>
-              {showDatePicker && (
-                <DateTimePicker
-                  value={startDate}
-                  mode="date"
-                  display="default"
-                  onChange={handleDateChange}
-                />
-              )}
-            </View>
-            <View style={styles.inputWrapper}>
-              <Text style={styles.label}>Give to</Text>
-              <View style={styles.dropdown}>
-                <Picker
-                  selectedValue={location}
-                  onValueChange={(value) => setLocation(value)}
-                  style={styles.picker}
-                  dropdownIconColor="#FF8C00"
-                  mode="dropdown"
-                >
-                  <Picker.Item label="Select..." value="" />
-                  <Picker.Item label="VCC - Goba Dar" value="VCC - Goba Dar" />
-                  <Picker.Item label="VCC - Arusha" value="VCC - Arusha" />
-                </Picker>
-              </View>
-            </View>
-          </View>
-        ) : (
-          <>
-            <Text style={styles.label}>Give to</Text>
-            <View style={styles.dropdown}>
-              <Picker
-                selectedValue={location}
-                onValueChange={(value) => setLocation(value)}
-                style={styles.picker}
-                dropdownIconColor="#FF8C00"
-                mode="dropdown"
-              >
-                <Picker.Item label="Select..." value="" />
-                <Picker.Item label="VCC Dar es salaam" value="VCC Dar es salaam" />
-                <Picker.Item label="VCC Arusha" value="VCC Arusha" />
-              </Picker>
-            </View>
-          </>
-        )}
+        {/* Location */}
+        <Text style={styles.label}>Give to</Text>
+        <View style={styles.dropdown}>
+          <Picker
+            selectedValue={location}
+            onValueChange={(val) => setLocation(val)}
+            style={styles.picker}
+            dropdownIconColor="#FF8C00"
+          >
+            <Picker.Item label="Select..." value="" />
+            {joinedCommunities.map((c) => (
+              <Picker.Item key={c.id} label={c.name} value={c.id} />
+            ))}
+          </Picker>
+        </View>
 
-        {/* Add Fund */}
-        <TouchableOpacity style={styles.addFund} onPress={addFund}>
+        {/* Add Fund Button */}
+        {/* <TouchableOpacity style={styles.addFund} onPress={addFund}>
           <Ionicons name="add" size={12} color="#FF8C00" />
           <Text style={styles.addFundText}>Add fund</Text>
-        </TouchableOpacity>
-
-        {/* Extra Funds */}
-        {funds.length > 1 &&
-          funds.slice(1).map((fund, index) => (
-            <View key={fund.id} style={styles.extraFund}>
-              <Text style={styles.label}>Additional Fund {index + 1}</Text>
-              <View style={styles.dropdown}>
-                <Picker
-                  selectedValue={fund.value}
-                  onValueChange={(val) => {
-                    const updatedFunds = [...funds];
-                    updatedFunds[index + 1].value = val;
-                    setFunds(updatedFunds);
-                  }}
-                  style={styles.picker}
-                  dropdownIconColor="#FF8C00"
-                  mode="dropdown"
-                >
-                  <Picker.Item label="Select..." value="" />
-                  <Picker.Item label="General Fund" value="General Fund" />
-                  <Picker.Item label="Missions" value="Missions" />
-                  <Picker.Item label="Tithe" value="Tithe" />
-                </Picker>
-              </View>
-            </View>
-          ))}
+        </TouchableOpacity> */}
 
         {/* Continue Button */}
-        <TouchableOpacity
-          activeOpacity={1}
-          style={styles.continueButton}
-          onPress={() => {
-            if (!amount || isNaN(amount) || Number(amount) <= 0) {
-              alert('Please enter an amount 😊');
-            } else {
-              setShowPaymentModal(true);
-            }
-          }}
-        >
-          <Text style={styles.continueButtonText}>
-            {amount ? `Give TZS ${amount}` : 'Enter amount to continue'}
-          </Text>
+        <TouchableOpacity style={styles.continueButton} onPress={() => setShowPaymentModal(true)}>
+          <Text style={styles.continueText}>Send</Text>
         </TouchableOpacity>
 
-        <View style={{ height: 24 }} />
-      </ScrollView>
+        {/* Payment Modal */}
+        <Modal
+          visible={showPaymentModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowPaymentModal(false)}
+        >
+          <TouchableWithoutFeedback onPress={() => setShowPaymentModal(false)}>
+            <View style={styles.modalOverlay} />
+          </TouchableWithoutFeedback>
 
-      {/* Payment Modal */}
-      <Modal
-        visible={showPaymentModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowPaymentModal(false)}
-      >
-        <TouchableWithoutFeedback onPress={() => setShowPaymentModal(false)}>
-          <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback>
-              <View style={styles.modalContainer}>
-                <TouchableOpacity
-                  style={styles.modalBackButton}
-                  onPress={() => setShowPaymentModal(false)}
-                >
-                  <Ionicons name="arrow-back" size={16} color="#FF8C00" />
-                  <Text style={styles.modalBackText}>Back</Text>
-                </TouchableOpacity>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Choose Payment Method</Text>
+            <View style={styles.dropdown}>
+              <Picker
+                selectedValue={paymentMethod}
+                onValueChange={(val) => setPaymentMethod(val)}
+                style={styles.picker}
+                dropdownIconColor="#FF8C00"
+              >
+                <Picker.Item label="Mobile money" value="Mobile money" />
+                <Picker.Item label="Card payment" value="Card payment" />
+              </Picker>
+            </View>
 
-                <Text style={styles.label}>Payment method</Text>
-                <View style={styles.dropdown}>
-                  <Picker
-                    selectedValue={paymentMethod}
-                    onValueChange={(value) => setPaymentMethod(value)}
-                    style={styles.picker}
-                    dropdownIconColor="#FF8C00"
-                    mode="dropdown"
-                  >
-                    <Picker.Item label="Mobile money" value="Mobile money" />
-                    <Picker.Item label="Card payment" value="Card payment" />
-                  </Picker>
-                </View>
-
-                <Text style={styles.label}>
-                  {paymentMethod === 'Card payment'
-                    ? 'Card number'
-                    : 'Mobile number'}
-                </Text>
+            {paymentMethod === 'Mobile money' ? (
+              <>
+                <Text style={styles.label}>Mobile Number</Text>
                 <TextInput
-                  style={styles.input}
-                  value={paymentMethod === 'Card payment' ? cardNumber : mobileNumber}
-                  onChangeText={
-                    paymentMethod === 'Card payment' ? setCardNumber : setMobileNumber
-                  }
+                  style={styles.textInput}
+                  value={mobileNumber}
+                  onChangeText={setMobileNumber}
+                  placeholder="e.g., 0712345678"
+                  keyboardType="phone-pad"
+                />
+              </>
+            ) : (
+              <>
+                <Text style={styles.label}>Card Number</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={cardNumber}
+                  onChangeText={setCardNumber}
+                  placeholder="1234 5678 9012 3456"
                   keyboardType="numeric"
-                  placeholder={
-                    paymentMethod === 'Card payment'
-                      ? '1234 5678 9012 3456'
-                      : '+255 718 XXX XXX'
-                  }
-                  placeholderTextColor="#999"
                 />
 
-                {paymentMethod === 'Card payment' && (
-                  <View style={styles.row}>
-                    <View style={[styles.inputWrapper, { marginRight: 8 }]}>
-                      <Text style={styles.label}>Expiry</Text>
-                      <TextInput
-                        style={styles.input}
-                        value={expiryDate}
-                        onChangeText={setExpiryDate}
-                        keyboardType="numeric"
-                        placeholder="MM/YY"
-                        placeholderTextColor="#999"
-                      />
-                    </View>
-                    <View style={styles.inputWrapper}>
-                      <Text style={styles.label}>CVV</Text>
-                      <TextInput
-                        style={styles.input}
-                        value={cvv}
-                        onChangeText={setCvv}
-                        keyboardType="numeric"
-                        placeholder="123"
-                        secureTextEntry
-                        placeholderTextColor="#999"
-                      />
-                    </View>
-                  </View>
-                )}
+                <Text style={styles.label}>Expiry Date</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={expiryDate}
+                  onChangeText={setExpiryDate}
+                  placeholder="MM/YY"
+                  keyboardType="numeric"
+                />
 
-                <TouchableOpacity
-                  activeOpacity={1}
-                  style={[styles.continueButton, { marginTop: 16 }]}
-                  onPress={() => {
-                    alert('Thank you! 🙏');
-                    setShowPaymentModal(false);
-                  }}
-                >
-                  <Text style={styles.continueButtonText}>Send</Text>
-                </TouchableOpacity>
-              </View>
-            </TouchableWithoutFeedback>
+                <Text style={styles.label}>CVV</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={cvv}
+                  onChangeText={setCvv}
+                  placeholder="123"
+                  keyboardType="numeric"
+                  secureTextEntry
+                />
+              </>
+            )}
+
+            <TouchableOpacity
+              style={[styles.continueButton, { marginTop: 24 }]}
+              onPress={sendContribution}
+              disabled={loading}
+            >
+              <Text style={styles.continueText}>{loading ? 'Sending...' : 'Submit'}</Text>
+            </TouchableOpacity>
           </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+        </Modal>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -367,7 +336,6 @@ const styles = StyleSheet.create({
   },
   headerIcons: {
     flexDirection: 'row',
-    alignItems: 'center',
   },
   label: {
     fontSize: 12,
@@ -380,23 +348,20 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 16,
     backgroundColor: '#fff',
-    overflow: 'hidden',
   },
   picker: {
     height: 40,
     width: '100%',
     color: '#000',
-    backgroundColor: 'transparent',
   },
   frequencyContainer: {
     flexDirection: 'row',
     marginBottom: 16,
   },
   freqButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 20,
+    padding: 8,
     backgroundColor: '#FFEFD5',
+    borderRadius: 20,
     marginRight: 8,
   },
   freqButtonActive: {
@@ -410,82 +375,58 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   amountBox: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    paddingVertical: 10, // reduced padding from 16 to 10
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    marginBottom: 16,
     borderWidth: 1,
     borderColor: '#FF8C00',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    alignItems: 'center',
+    backgroundColor: '#fff',
   },
   currency: {
-    fontSize: 10, // reduced from 12
+    fontSize: 10,
     color: '#000',
-    marginBottom: 2, // reduced from 4
   },
   amount: {
-    fontSize: 20, // reduced from 24
+    fontSize: 20,
     fontWeight: '600',
     color: '#000',
     textAlign: 'center',
     width: '100%',
   },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  inputWrapper: {
-    flex: 1,
-  },
-  textInput: {
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderWidth: 1,
-    borderColor: '#FF8C00',
-    borderRadius: 8,
-    marginBottom: 16,
-  },
   addFund: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 16,
   },
   addFundText: {
     marginLeft: 6,
     color: '#FF8C00',
-    fontSize: 12,
-  },
-  extraFund: {
-    marginBottom: 16,
   },
   continueButton: {
     backgroundColor: '#FF8C00',
-    borderRadius: 20, // oval shape
-    paddingVertical: 10, // smaller height
-    paddingHorizontal: 24, // horizontal padding for width
+    borderRadius: 20,
+    padding: 12,
     alignItems: 'center',
-    alignSelf: 'center', // center horizontally
-    minWidth: 180,
+    marginVertical: 20,
   },
-  continueButtonText: {
+  continueText: {
     color: '#fff',
+    fontSize: 14,
     fontWeight: '600',
-    fontSize: 14, // smaller font size
   },
-  input: {
+  textInput: {
     borderWidth: 1,
     borderColor: '#FF8C00',
     borderRadius: 8,
     padding: 10,
-    fontSize: 14,
     marginBottom: 16,
     color: '#000',
+    backgroundColor: '#fff',
   },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.3)',
-    justifyContent: 'flex-end',
   },
   modalContainer: {
     backgroundColor: '#fff',
@@ -493,14 +434,9 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
   },
-  modalBackButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '600',
     marginBottom: 16,
-  },
-  modalBackText: {
-    fontSize: 14,
-    color: '#FF8C00',
-    marginLeft: 4,
   },
 });

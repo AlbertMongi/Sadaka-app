@@ -1,95 +1,148 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';  // <-- import useRouter
-
-const notificationsData = [
-  {
-    id: '1',
-    title: 'New Offering Received',
-    message: 'You have received a new offering of TZS 50,000.',
-    date: '2025-08-18 14:30',
-    read: false,
-  },
-  {
-    id: '2',
-    title: 'Weekly Report',
-    message: 'Your weekly giving report is now available.',
-    date: '2025-08-17 09:00',
-    read: true,
-  },
-  {
-    id: '3',
-    title: 'Thank You!',
-    message: 'Thank you for your generous tithe this month.',
-    date: '2025-08-15 12:15',
-    read: true,
-  },
-];
+import { useRouter } from 'expo-router';
+import { BASE_URL } from './apiConfig'; // ✅ Correct path
 
 export default function NotificationScreen() {
-  const [notifications, setNotifications] = useState(notificationsData);
-  const router = useRouter(); // <-- initialize router
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
-  const renderNotification = ({ item }) => {
-    return (
-      <View
-        style={[
-          styles.notificationCard,
-          !item.read && styles.unreadNotification,
-        ]}
-      >
-        <View style={styles.notificationHeader}>
-          <Text style={[styles.notificationTitle, !item.read && {color: '#FF8C00'}]}>
-            {item.title}
-          </Text>
-          {!item.read && <View style={styles.unreadDot} />}
-        </View>
-        <Text style={styles.notificationMessage} numberOfLines={2}>
-          {item.message}
-        </Text>
-        <Text style={styles.notificationDate}>
-          {new Date(item.date).toLocaleString(undefined, {
-            dateStyle: 'medium',
-            timeStyle: 'short',
-          })}
-        </Text>
-      </View>
-    );
+  const fetchNotifications = async () => {
+    try {
+      const token = await AsyncStorage.getItem('userToken'); // Get token from storage
+      if (!token) {
+        console.warn('No auth token found');
+        setNotifications([]);
+        setLoading(false);
+        return;
+      }
+
+      const response = await fetch(
+        `${BASE_URL}/notifications/user/`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`, // Send token in header
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (Array.isArray(data)) {
+        setNotifications(data);
+      } else {
+        console.error('Unexpected response format:', data);
+        setNotifications([]);
+      }
+    } catch (error) {
+      console.error('Failed to fetch notifications:', error);
+      setNotifications([]);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  useEffect(() => {
+    fetchNotifications();
+  }, []);
+
+  const hasUnread = Array.isArray(notifications)
+    ? notifications.some((n) => !n.readAt)
+    : false;
+
+  const renderNotification = ({ item }) => (
+    <View
+      style={[
+        styles.notificationCard,
+        !item.readAt && styles.unreadNotification,
+      ]}
+    >
+      <View style={styles.notificationHeader}>
+        <Text
+          style={[
+            styles.notificationTitle,
+            !item.readAt && { color: '#FF8C00' },
+          ]}
+        >
+          {item.title || 'Untitled'}
+        </Text>
+        {!item.readAt && <View style={styles.unreadDot} />}
+      </View>
+      <Text style={styles.notificationMessage} numberOfLines={2}>
+        {item.message || 'No message'}
+      </Text>
+      <Text style={styles.notificationDate}>
+        {new Date(item.createdAt).toLocaleString(undefined, {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        })}
+      </Text>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => router.back()}  // <-- use router.back()
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('main/index1'); // fallback route (home)
+            }
+          }}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <Ionicons name="arrow-back" size={20} color="#FF8C00" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Notifications</Text>
+
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Text style={styles.headerTitle}>Notifications</Text>
+          {hasUnread && <View style={styles.headerDot} />}
+        </View>
+
         <View style={{ width: 20 }} />
       </View>
 
       {/* Notifications List */}
-      {notifications.length > 0 ? (
+      {loading ? (
+        <ActivityIndicator
+          size="large"
+          color="#FF8C00"
+          style={{ marginTop: 50 }}
+        />
+      ) : notifications.length > 0 ? (
         <FlatList
           data={notifications}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item.id.toString()}
           renderItem={renderNotification}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
         />
       ) : (
         <View style={styles.emptyContainer}>
-          <Ionicons name="notifications-off-outline" size={64} color="#FF8C00" />
+          <Ionicons
+            name="notifications-off-outline"
+            size={64}
+            color="#FF8C00"
+          />
           <Text style={styles.emptyText}>No notifications yet</Text>
           <Text style={styles.emptySubText}>
             Once you receive notifications, they’ll appear here.
@@ -117,6 +170,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#000',
+  },
+  headerDot: {
+    marginLeft: 6,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#007BFF', // Blue dot for unread
   },
   listContainer: {
     paddingBottom: 20,

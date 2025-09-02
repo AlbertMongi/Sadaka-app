@@ -11,14 +11,16 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BASE_URL } from './apiConfig'; // ✅ Correct path
 
-const API_BASE_URL = 'http://192.168.100.24:8000';
+const API_BASE_URL = `${BASE_URL}`;
+
 
 export default function Login() {
   const router = useRouter();
 
   const [phoneNumber, setPhoneNumber] = useState('');
-  // Removed password state and related logic
   const [buttonOpacity] = React.useState(new Animated.Value(1));
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -33,27 +35,27 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/user/login`, {
+      const response = await fetch(`${API_BASE_URL}/user/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phoneNo: phoneNumber,
-          // Password removed from request
-        }),
+        body: JSON.stringify({ phoneNo: phoneNumber }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        Alert.alert('Success', 'You are logged in!');
-        console.log('Logged in:', data);
-        router.push('otp'); // navigate on success
+        // Store phone and token
+        await AsyncStorage.setItem('userPhoneNo', phoneNumber);
+        await AsyncStorage.setItem('loginToken', data.token); // <-- Store login token
+
+        Alert.alert('Success', 'OTP sent to your phone!');
+        console.log('Login successful, navigating to OTP screen with token:', data.token);
+        router.push('/otp2');
       } else {
         setErrorMessage(data.message || 'Login failed. Please try again.');
       }
     } catch (error) {
       setErrorMessage('Network error. Please try again later.');
-      console.error('Login error:', error);
     } finally {
       setLoading(false);
     }
@@ -77,17 +79,13 @@ export default function Login() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Welcome Back</Text>
         <Text style={styles.subtitle}>Please log in to continue</Text>
       </View>
 
-      {/* Form Inputs */}
       <View style={styles.form}>
-        {errorMessage ? (
-          <Text style={styles.errorText}>{errorMessage}</Text>
-        ) : null}
+        {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
         <TextInput
           placeholder="Phone Number"
@@ -99,7 +97,6 @@ export default function Login() {
           editable={!loading}
         />
 
-        {/* Login Button */}
         <Animated.View style={{ width: '80%', opacity: buttonOpacity }}>
           <TouchableOpacity
             activeOpacity={0.9}
@@ -126,10 +123,10 @@ export default function Login() {
           </TouchableOpacity>
         </Animated.View>
 
-        {/* Register Link */}
         <TouchableOpacity onPress={() => router.push('register')}>
           <Text style={styles.registerLink}>
-            Don't have an account? <Text style={{ color: '#FF8C00' }}>Register</Text>
+            Don't have an account?{' '}
+            <Text style={{ color: '#FF8C00' }}>Register</Text>
           </Text>
         </TouchableOpacity>
       </View>

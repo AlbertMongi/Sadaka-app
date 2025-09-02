@@ -9,12 +9,17 @@ import {
   Dimensions,
   TouchableOpacity,
   Alert,
+  SafeAreaView,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons, Entypo, FontAwesome5 } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BASE_URL } from './apiConfig'; // ✅ Correct path
 
 const GOLD = '#FFA500';
 const SCREEN_WIDTH = Dimensions.get('window').width;
+const API_BASE = BASE_URL;
+
 
 export default function CommunityDetail() {
   const { communityId } = useLocalSearchParams();
@@ -26,141 +31,275 @@ export default function CommunityDetail() {
   const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
-    if (!communityId) return;
+    let isMounted = true;
 
     const fetchCommunity = async () => {
+      if (!communityId) {
+        console.log('No communityId found in params');
+        return;
+      }
+
       try {
         setLoading(true);
-        const res = await fetch(`http://192.168.100.24:8000/api/communities/${communityId}`);
+        const token = await AsyncStorage.getItem('userToken');
+        if (!token) {
+          Alert.alert('Error', 'User not authenticated. Please login.');
+          return;
+        }
+
+        const res = await fetch(`${API_BASE}/communities/${communityId}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
         const json = await res.json();
 
-        if (res.ok && json.success && typeof json.data === 'object') {
-          setCommunity(json.data);
-          setError(null);
+        if (res.ok && json.success && json.data) {
+          if (isMounted) {
+            setCommunity({ ...json.data, isMember: json.data.joined });
+          }
         } else {
-          setError('Community not found');
+          if (isMounted) setError(json.message || 'Failed to fetch community data');
         }
-      } catch {
-        setError('Failed to fetch community data');
+      } catch (err) {
+        if (isMounted) setError('Network error: ' + err.message);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
 
     fetchCommunity();
+
+    return () => {
+      isMounted = false;
+    };
   }, [communityId]);
 
-  const toggleMembership = async () => {
+  const joinCommunity = async () => {
     if (!community) return;
     setActionLoading(true);
 
-    const endpoint = community.isMember ? 'leave' : 'join';
     try {
-      const res = await fetch(`http://192.168.100.24:8000/api/communities/${communityId}/${endpoint}`, {
-        method: 'POST',
-      });
-      if (res.ok) {
-        setCommunity({ ...community, isMember: !community.isMember });
-      } else {
-        Alert.alert('Error', `${community.isMember ? 'Leave' : 'Join'} request failed.`);
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) {
+        Alert.alert('Error', 'User not authenticated.');
+        setActionLoading(false);
+        return;
       }
-    } catch {
-      Alert.alert('Error', `Failed to ${community.isMember ? 'leave' : 'join'} community.`);
+
+      const res = await fetch(`${API_BASE}/communities/${communityId}/join`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const json = await res.json();
+
+      if (res.ok && json.success) {
+        setCommunity(prev => ({ ...prev, isMember: true }));
+        Alert.alert('Success', 'You have joined the community.');
+      } else {
+        Alert.alert('Error', json.message || 'Failed to join community.');
+      }
+    } catch (err) {
+      Alert.alert('Error', `Network error: ${err.message}`);
     } finally {
       setActionLoading(false);
     }
   };
 
+  const leaveCommunity = async () => {
+    if (!community) return;
+
+    setActionLoading(true);
+
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) {
+        Alert.alert('Error', 'User not authenticated.');
+        setActionLoading(false);
+        return;
+      }
+
+      const res = await fetch(`${API_BASE}/communities/${communityId}/leave`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const json = await res.json();
+
+      if (res.ok && json.success) {
+        setCommunity(prev => ({ ...prev, isMember: false }));
+        Alert.alert('Success', 'You have left the community.');
+        router.replace('main/community');
+      } else {
+        Alert.alert('Error', json.message || 'Failed to leave community.');
+      }
+    } catch (err) {
+      Alert.alert('Error', `Network error: ${err.message}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const leaveCommunityWithConfirm = () => {
+    Alert.alert(
+      'Confirm Leave',
+      'Are you sure you want to leave this community?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Leave', style: 'destructive', onPress: leaveCommunity },
+      ],
+      { cancelable: true }
+    );
+  };
+
+  const handleMembershipToggle = () => {
+    if (!community) return;
+    if (community.isMember) {
+      leaveCommunity();
+      // To re-enable confirmation dialog, replace with leaveCommunityWithConfirm();
+    } else {
+      joinCommunity();
+    }
+  };
+
   if (loading) {
     return (
-      <View style={styles.center}>
+      <SafeAreaView style={styles.center}>
         <ActivityIndicator size="large" color={GOLD} />
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (error) {
     return (
-      <View style={styles.center}>
+      <SafeAreaView style={styles.center}>
         <Text style={styles.errorText}>{error}</Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (!community) {
     return (
-      <View style={styles.center}>
+      <SafeAreaView style={styles.center}>
         <Text>No community data available.</Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
   const logoUri = community.logo?.startsWith('http')
     ? community.logo
-    : `http://192.168.100.24:8000/${community.logo}`;
+    : `${API_BASE}/${community.logo}`;
+
+  // Icon mapping for fields
+  const iconMap = {
+    Description: <Ionicons name="document-text" size={16} color={GOLD} />,
+    Region: <Entypo name="map" size={16} color={GOLD} />,
+    District: <MaterialIcons name="location-city" size={16} color={GOLD} />,
+    Street: <Ionicons name="location-sharp" size={16} color={GOLD} />,
+    'Phone Number': <Ionicons name="call" size={16} color={GOLD} />,
+    Email: <MaterialIcons name="email" size={16} color={GOLD} />,
+  };
 
   const FieldCard = ({ label, value }) => (
     <View style={styles.card}>
-      <Text style={styles.label}>{label}</Text>
+      <View style={styles.labelContainer}>
+        {iconMap[label]}
+        <Text style={styles.label}>{label}</Text>
+      </View>
       <Text style={styles.value}>{value || 'N/A'}</Text>
     </View>
   );
 
   return (
-    <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-      <TouchableOpacity style={styles.backButton} onPress={() => router.push('main/community')}>
-        <Ionicons name="arrow-back" size={28} color={GOLD} />
-      </TouchableOpacity>
-
-      <View style={styles.logoContainer}>
-        <Image source={{ uri: logoUri }} style={styles.logo} resizeMode="cover" />
-      </View>
-
-      <FieldCard label="Name" value={community.name} />
-      <FieldCard label="Description" value={community.description} />
-      <FieldCard label="Region" value={community.region} />
-      <FieldCard label="District" value={community.district} />
-      <FieldCard label="Street" value={community.street} />
-      <FieldCard label="Phone Number" value={community.phoneNo} />
-      <FieldCard label="Email" value={community.email} />
-
-      <TouchableOpacity
-        style={[styles.actionButton, community.isMember ? styles.leaveButton : styles.joinButton]}
-        onPress={toggleMembership}
-        disabled={actionLoading}
+    <SafeAreaView style={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContainer}
+        showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.actionText}>
-          {actionLoading
-            ? 'Processing...'
-            : community.isMember
-            ? 'Leave Community'
-            : 'Join Community'}
-        </Text>
-      </TouchableOpacity>
-    </ScrollView>
+        <View style={styles.headerContainer}>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={22} color={GOLD} />
+          </TouchableOpacity>
+          <Text style={styles.headerText} numberOfLines={1} ellipsizeMode="tail">
+            {community.name}
+          </Text>
+        </View>
+
+        <View style={styles.logoContainer}>
+          <Image source={{ uri: logoUri }} style={styles.logo} resizeMode="cover" />
+        </View>
+
+        <FieldCard label="Description" value={community.description} />
+        <FieldCard label="Region" value={community.region} />
+        <FieldCard label="District" value={community.district} />
+        <FieldCard label="Street" value={community.street} />
+        <FieldCard label="Phone Number" value={community.phoneNo} />
+        <FieldCard label="Email" value={community.email} />
+
+        <TouchableOpacity
+          style={[
+            styles.actionButton,
+            community.isMember ? styles.leaveButton : styles.joinButton,
+          ]}
+          onPress={handleMembershipToggle}
+          disabled={actionLoading}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.actionText}>
+            {actionLoading
+              ? 'Processing...'
+              : community.isMember
+              ? 'Unfollow Community'
+              : 'Follow Community'}
+          </Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  backButton: {
-    position: 'absolute',
-    top: 50,
-    left: 20,
-    zIndex: 10,
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
   },
   center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
     padding: 16,
   },
   scrollContainer: {
-    paddingTop: 90,
-    paddingHorizontal: 20,
+    paddingHorizontal: 10,
+    paddingBottom: 40,
     alignItems: 'center',
-    backgroundColor: '#f7f7f7',
-    paddingBottom: 60,
+    paddingTop: 30,
+  },
+  headerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: SCREEN_WIDTH - 20,
+    marginBottom: 20,
+    marginLeft: 10,
+  },
+  backButton: {
+    paddingRight: 10,
+  },
+  headerText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#000',
+    flexShrink: 1,
   },
   logoContainer: {
     backgroundColor: '#fff',
@@ -184,7 +323,7 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: '#fff',
-    width: SCREEN_WIDTH * 0.8,
+    width: SCREEN_WIDTH - 20,
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -195,20 +334,25 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 5,
   },
+  labelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
   label: {
     color: GOLD,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
-    marginBottom: 4,
+    marginLeft: 6,
   },
   value: {
     color: '#333',
-    fontSize: 15,
+    fontSize: 14,
   },
   actionButton: {
-    width: SCREEN_WIDTH * 0.8,
+    width: SCREEN_WIDTH - 20,
     borderRadius: 8,
-    paddingVertical: 12,
+    paddingVertical: 14,
     marginTop: 16,
     alignItems: 'center',
   },
@@ -221,10 +365,10 @@ const styles = StyleSheet.create({
   actionText: {
     color: '#fff',
     fontWeight: '600',
-    fontSize: 16,
+    fontSize: 15,
   },
   errorText: {
     color: 'red',
-    fontSize: 18,
+    fontSize: 16,
   },
 });

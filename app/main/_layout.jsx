@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, Text } from 'react-native';
 
 export default function Layout() {
   return (
@@ -11,38 +11,47 @@ export default function Layout() {
         tabBarInactiveTintColor: '#6B4F4F',
         tabBarStyle: styles.bottomNav,
         tabBarItemStyle: styles.navItem,
-        tabBarLabelStyle: styles.tabLabel,
         tabBarHideOnKeyboard: true,
-        tabBarIcon: ({ focused, color, size }) => {
+        tabBarLabelStyle: { fontSize: 0 }, // hides default label
+        tabBarIcon: ({ focused, color }) => {
           let iconName;
+          let label;
           let IconComponent = Ionicons;
 
           if (route.name === 'index1') {
             iconName = 'home-outline';
+            label = 'Home';
           } else if (route.name === 'bible') {
             IconComponent = MaterialCommunityIcons;
             iconName = 'calendar';
+            label = 'Events';
           } else if (route.name === 'contribution') {
             IconComponent = MaterialCommunityIcons;
             iconName = 'hand-heart-outline';
+            label = 'Give';
           } else if (route.name === 'community') {
             IconComponent = MaterialCommunityIcons;
-            iconName = 'account-group-outline'; // three people icon
+            iconName = 'account-group-outline';
+            label = 'Communities';
           }
 
-          if (focused) {
-            return (
-              <View style={styles.floatingIcon}>
-                <IconComponent name={iconName} size={20} color="#fff" />
-              </View>
-            );
-          }
-
-          return <IconComponent name={iconName} size={20} color={color} />;
+          return (
+            <View style={{ alignItems: 'center' }}>
+              {focused ? (
+                <View style={styles.floatingIcon}>
+                  <IconComponent name={iconName} size={18} color="#fff" />
+                </View>
+              ) : (
+                <IconComponent name={iconName} size={18} color={color} />
+              )}
+              <Text style={focused ? styles.activeLabel : styles.inactiveLabel}>
+                {label}
+              </Text>
+            </View>
+          );
         },
       })}
     >
-      {/* Hide tab bar on these screens */}
       {['getstarted', 'login', 'register'].map((screen) => (
         <Tabs.Screen
           key={screen}
@@ -55,21 +64,20 @@ export default function Layout() {
         />
       ))}
 
-      {/* Main Tabs */}
-      <Tabs.Screen name="index1" options={{ tabBarLabel: '' }} />
-      <Tabs.Screen name="bible" options={{ tabBarLabel: '' }} />
-      <Tabs.Screen name="contribution" options={{ tabBarLabel: '' }} />
-      <Tabs.Screen name="community" options={{ tabBarLabel: '' }} />
+      <Tabs.Screen name="index1" />
+      <Tabs.Screen name="bible" />
+      <Tabs.Screen name="contribution" />
+      <Tabs.Screen name="community" />
     </Tabs>
   );
 }
 
 const styles = StyleSheet.create({
   bottomNav: {
-    backgroundColor: '#FFF3D4', // subtle gold shade
-    height: 70,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
+    backgroundColor: '#FFF3D4',
+    height: 62, // slightly reduced
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
     position: 'absolute',
     left: 0,
     right: 0,
@@ -77,26 +85,35 @@ const styles = StyleSheet.create({
     shadowColor: '#000',
     shadowOpacity: 0.08,
     shadowOffset: { width: 0, height: -2 },
-    shadowRadius: 6,
-    elevation: 6,
+    shadowRadius: 5,
+    elevation: 5,
     borderTopWidth: 0,
   },
   navItem: {
     alignItems: 'center',
     justifyContent: 'center',
+    paddingTop: 4,
   },
-  tabLabel: {
-    fontSize: 0,
+  activeLabel: {
+    fontSize: 11,
+    color: '#FFA500',
+    marginTop: 2,
+    fontWeight: '600',
+  },
+  inactiveLabel: {
+    fontSize: 10,
+    color: '#6B4F4F',
+    marginTop: 2,
   },
   floatingIcon: {
-    backgroundColor: '#FFA500', // main orange
-    padding: 12,
-    borderRadius: 30,
-    marginBottom: 30, // push it up
+    backgroundColor: '#FFA500',
+    padding: 10,
+    borderRadius: 25,
+    marginBottom: 4,
     shadowColor: '#000',
     shadowOpacity: 0.2,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 8,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 6,
+    elevation: 6,
   },
 });
