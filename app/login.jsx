@@ -12,21 +12,21 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { BASE_URL } from './apiConfig'; // ✅ Correct path
+import { BASE_URL } from './apiConfig'; // ✅ Adjust path as needed
 
 const API_BASE_URL = `${BASE_URL}`;
-
 
 export default function Login() {
   const router = useRouter();
 
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [buttonOpacity] = React.useState(new Animated.Value(1));
+  const [buttonOpacity] = useState(new Animated.Value(1));
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
   const handleLogin = async () => {
     setErrorMessage('');
+
     if (!phoneNumber) {
       setErrorMessage('Please enter phone number.');
       return;
@@ -42,19 +42,19 @@ export default function Login() {
       });
 
       const data = await response.json();
+      console.log('API response:', data); // ✅ Helpful for debugging
 
       if (response.ok) {
-        // Store phone and token
+        // ✅ Store phone number only, since token isn't returned here
         await AsyncStorage.setItem('userPhoneNo', phoneNumber);
-        await AsyncStorage.setItem('loginToken', data.token); // <-- Store login token
 
         Alert.alert('Success', 'OTP sent to your phone!');
-        console.log('Login successful, navigating to OTP screen with token:', data.token);
-        router.push('/otp2');
+        router.push('/otp');
       } else {
         setErrorMessage(data.message || 'Login failed. Please try again.');
       }
     } catch (error) {
+      console.error('Login error:', error); // ✅ Debug log
       setErrorMessage('Network error. Please try again later.');
     } finally {
       setLoading(false);

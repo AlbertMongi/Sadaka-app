@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function TransactionHistory() {
   const [transactions, setTransactions] = useState([]);
@@ -28,21 +29,38 @@ export default function TransactionHistory() {
     const fetchTransactions = async () => {
       try {
         setLoading(true);
-        const response = await fetch('http://192.168.100.24:8000/api/contributions/user');
+
+        const token = await AsyncStorage.getItem('userToken');
+        if (!token) {
+          Alert.alert('Error', 'No token found.');
+          setLoading(false);
+          return;
+        }
+
+        const response = await fetch('http://192.168.100.24:8000/api/contributions/user', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
         const json = await response.json();
 
         if (json.success && Array.isArray(json.data)) {
           const mapped = json.data.map(item => {
-            const dateObj = new Date(); // Replace with actual timestamp if available
+            const dateObj = new Date(item.createdAt || Date.now());
             return {
               id: item.id,
+              userId: item.userId,
+              communityId: item.communityId,
+              amount: item.amount,
+              purpose: item.purpose || 'No purpose given',
+              status: item.status || 'Pending',
               date: String(dateObj.getDate()).padStart(2, '0'),
               month: dateObj.toLocaleString('default', { month: 'short' }),
               title: 'Contribution',
-              description: item.purpose || 'No purpose given',
-              amount: item.amount,
               type: 'Credit',
-              status: 'Completed',
             };
           });
           setTransactions(mapped);
@@ -60,7 +78,7 @@ export default function TransactionHistory() {
   }, []);
 
   const filteredTransactions = transactions.filter(txn =>
-    `${txn.title} ${txn.description}`.toLowerCase().includes(searchTerm.toLowerCase())
+    `${txn.title} ${txn.purpose}`.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const closeModal = () => setSelectedTxn(null);
@@ -102,9 +120,7 @@ export default function TransactionHistory() {
               keyExtractor={item => item.id}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingBottom: 40 }}
-              ListEmptyComponent={
-                <Text style={styles.noResults}>No transactions found.</Text>
-              }
+              ListEmptyComponent={<Text style={styles.noResults}>No transactions found.</Text>}
               renderItem={({ item }) => (
                 <TouchableOpacity style={styles.card} onPress={() => setSelectedTxn(item)}>
                   <View style={styles.dateBadge}>
@@ -113,7 +129,7 @@ export default function TransactionHistory() {
                   </View>
                   <View style={styles.info}>
                     <Text style={styles.title}>{item.title}</Text>
-                    <Text style={styles.description}>{item.description}</Text>
+                    <Text style={styles.description}>{item.purpose}</Text>
                     <Text style={styles.type}>{item.type}</Text>
                     <Text style={styles.status}>Status: {item.status}</Text>
                   </View>
@@ -142,19 +158,18 @@ export default function TransactionHistory() {
             <Pressable style={styles.modalOverlay} onPress={closeModal}>
               <View style={styles.modalContainer}>
                 <Text style={styles.modalTitle}>Transaction Details</Text>
-                <Text style={styles.modalLabel}>Title:</Text>
-                <Text style={styles.modalText}>{selectedTxn?.title}</Text>
 
-                <Text style={styles.modalLabel}>Description:</Text>
-                <Text style={styles.modalText}>{selectedTxn?.description}</Text>
+                {/* <Text style={styles.modalLabel}>ID:</Text>
+                <Text style={styles.modalText}>{selectedTxn?.id}</Text>
 
-                <Text style={styles.modalLabel}>Date:</Text>
-                <Text style={styles.modalText}>
-                  {selectedTxn?.date} {selectedTxn?.month}
-                </Text>
+                <Text style={styles.modalLabel}>User ID:</Text>
+                <Text style={styles.modalText}>{selectedTxn?.userId}</Text>
 
-                <Text style={styles.modalLabel}>Type:</Text>
-                <Text style={styles.modalText}>{selectedTxn?.type}</Text>
+                <Text style={styles.modalLabel}>Community ID:</Text>
+                <Text style={styles.modalText}>{selectedTxn?.communityId}</Text> */}
+
+                <Text style={styles.modalLabel}>Purpose:</Text>
+                <Text style={styles.modalText}>{selectedTxn?.purpose}</Text>
 
                 <Text style={styles.modalLabel}>Status:</Text>
                 <Text style={styles.modalText}>{selectedTxn?.status}</Text>
@@ -168,6 +183,11 @@ export default function TransactionHistory() {
                 >
                   {selectedTxn?.amount >= 0 ? '+' : '-'}Tz{Math.abs(selectedTxn?.amount)}
                 </Text>
+
+                <Text style={styles.modalLabel}>Date:</Text>
+                <Text style={styles.modalText}>
+                  {selectedTxn?.date} {selectedTxn?.month}
+                </Text>
               </View>
             </Pressable>
           </Modal>
@@ -177,7 +197,6 @@ export default function TransactionHistory() {
   );
 }
 
-
 const styles = StyleSheet.create({
   safeContainer: {
     flex: 1,
@@ -185,8 +204,8 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    paddingHorizontal: 12,
-    paddingTop: 24,
+    paddingHorizontal: 16,
+    paddingTop:  Platform.OS === 'ios' ? -40 : 2, 
   },
   header: {
     flexDirection: 'row',
@@ -227,53 +246,57 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
     backgroundColor: '#fff',
-    borderRadius: 14,
+    borderRadius: 16,
     marginBottom: 12,
-    overflow: 'hidden',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowOffset: { width: 0, height: 3 },
-    shadowRadius: 4,
     padding: 12,
     alignItems: 'center',
+
+    // Shadow for iOS
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+
+    // Elevation for Android
+    elevation: 3,
   },
   dateBadge: {
     backgroundColor: '#FF8C00',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
-    width: 50,
+    width: 60,
   },
   dateText: {
     color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
+    fontWeight: '700',
+    fontSize: 18,
   },
   monthText: {
     color: '#fff',
     fontSize: 12,
+    marginTop: 2,
   },
   info: {
     flex: 1,
   },
   title: {
     fontWeight: '600',
-    fontSize: 14,
+    fontSize: 16,
     color: '#000',
-    marginBottom: 2,
+    marginBottom: 4,
   },
   description: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 2,
+    fontSize: 13,
+    color: '#555',
+    marginBottom: 4,
   },
   type: {
     fontSize: 11,
-    color: '#444',
+    color: '#666',
     fontStyle: 'italic',
   },
   status: {
@@ -288,7 +311,7 @@ const styles = StyleSheet.create({
   },
   amount: {
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 16,
   },
   modalOverlay: {
     flex: 1,

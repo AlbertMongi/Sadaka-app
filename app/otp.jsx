@@ -29,7 +29,7 @@ export default function OTPVerification() {
 
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [resendTimer, setResendTimer] = useState(60); // Start with 60s countdown
+  const [resendTimer, setResendTimer] = useState(10); // Start with 60s countdown
   const [buttonOpacity] = useState(new Animated.Value(1));
   const [phoneNo, setPhoneNo] = useState(null);
 

@@ -463,10 +463,10 @@ const onSelectCommunity = async (communityId) => {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', paddingTop: 15 },
+  container: { flex: 1, backgroundColor: '#fff', paddingTop: 10 },
   customHeader: {
     backgroundColor: '#fff',
-    paddingTop: 12,
+    paddingTop: Platform.OS === 'ios' ? -100 : 50,
     paddingHorizontal: 16,
     paddingBottom: 8,
   },

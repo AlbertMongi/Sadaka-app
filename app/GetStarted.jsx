@@ -1,119 +1,110 @@
-import React, { useRef, useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  FlatList,
-  Image,
-  Dimensions,
-  SafeAreaView,
-  StatusBar,
-} from 'react-native';
+import { Tabs } from 'expo-router';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { StyleSheet, View, Text } from 'react-native';
 
-const { width } = Dimensions.get('window');
-
-// const IMAGES = [
-//   { id: '1', uri: 'https://images.pexels.com/photos/1666816/pexels-photo-1666816.jpeg' },
-//   { id: '2', uri: 'https://images.pexels.com/photos/1666816/pexels-photo-1666816.jpeg' },
-//   { id: '3', uri: 'https://images.pexels.com/photos/1666816/pexels-photo-1666816.jpeg' },
-// ];
-
-export default function GetStarted({ navigation }) {
-  const flatListRef = useRef(null);
-  const [currentIndex, setCurrentIndex] = useState(0);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const nextIndex = (currentIndex + 1) % IMAGES.length;
-      setCurrentIndex(nextIndex);
-      flatListRef.current?.scrollToIndex({ index: nextIndex, animated: true });
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [currentIndex]);
-
+export default function Layout() {
   return (
-    <View style={styles.root}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+    <Tabs
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarActiveTintColor: '#FFA500',
+        tabBarInactiveTintColor: '#6B4F4F',
+        tabBarStyle: styles.bottomNav,
+        tabBarItemStyle: styles.navItem,
+        tabBarHideOnKeyboard: true,
+        tabBarLabelStyle: { fontSize: 0 }, // hides default label
+        tabBarIcon: ({ focused, color }) => {
+          let iconName;
+          let label;
+          let IconComponent = Ionicons;
 
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.topContent}>
-          <Text style={styles.welcomeText}>Welcome to Sadaka!</Text>
-          <FlatList
-            ref={flatListRef}
-            data={IMAGES}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <Image source={{ uri: item.uri }} style={styles.characterImage} />
-            )}
-          />
-        </View>
+          if (route.name === 'index1') {
+            iconName = 'home-outline';
+            label = 'Home';
+          } else if (route.name === 'bible') {
+            IconComponent = MaterialCommunityIcons;
+            iconName = 'calendar';
+            label = 'Bible';
+          } else if (route.name === 'contribution') {
+            IconComponent = MaterialCommunityIcons;
+            iconName = 'hand-heart-outline';
+            label = 'Contribution';
+          } else if (route.name === 'community') {
+            IconComponent = MaterialCommunityIcons;
+            iconName = 'account-group-outline';
+            label = 'Community';
+          }
 
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity
-            style={styles.button}
-            onPress={() => navigation.navigate('main/Index1')}
-          >
-            <Text style={styles.buttonText}>GET STARTED</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    </View>
+          return (
+            <View style={{ alignItems: 'center' }}>
+              <IconComponent
+                name={iconName}
+                size={22}
+                color={focused ? '#FFA500' : color}
+                style={focused ? styles.activeIcon : null}
+              />
+              <Text style={focused ? styles.activeLabel : styles.inactiveLabel}>
+                {label}
+              </Text>
+            </View>
+          );
+        },
+      })}
+    >
+      {['getstarted', 'login', 'register'].map((screen) => (
+        <Tabs.Screen
+          key={screen}
+          name={screen}
+          options={{
+            tabBarStyle: { display: 'none' },
+            headerShown: false,
+            gestureEnabled: false,
+          }}
+        />
+      ))}
+
+      <Tabs.Screen name="index1" />
+      <Tabs.Screen name="bible" />
+      <Tabs.Screen name="contribution" />
+      <Tabs.Screen name="community" />
+    </Tabs>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: '#fff', // ✅ White background
+  bottomNav: {
+    backgroundColor: '#FFF3D4',
+    height: 62,
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: -2 },
+    shadowRadius: 5,
+    elevation: 5,
+    borderTopWidth: 0,
   },
-  safeArea: {
-    flex: 1,
-    justifyContent: 'space-between',
+  navItem: {
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 4,
   },
-  topContent: {
-    marginTop: 40,
-    alignItems: 'center',
+  activeIcon: {
+    marginBottom: 2, // lifts the active icon slightly upward
   },
-  welcomeText: {
-    color: '#FF69B4',
-    fontSize: 20,
-    fontFamily: 'Comic Sans MS',
-    textAlign: 'center',
-    textShadowColor: '#00000020',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-    marginBottom: 15,
+  activeLabel: {
+    fontSize: 11,
+    color: '#FFA500',
+    marginTop: 2,
+    fontWeight: '600',
   },
-  characterImage: {
-    width: width * 0.6,
-    height: width * 0.6,
-    borderRadius: (width * 0.6) / 2,
-    marginHorizontal: 10,
-  },
-  buttonContainer: {
-    width: '100%',
-    alignItems: 'center',
-    paddingBottom: 30,
-  },
-  button: {
-    backgroundColor: '#FFB6C1',
-    paddingVertical: 10,
-    width: '80%',
-    borderRadius: 25,
-    borderWidth: 2,
-    borderColor: '#FF69B4',
-  },
-  buttonText: {
-    color: '#FF1493',
-    fontSize: 16,
-    fontFamily: 'Comic Sans MS',
-    fontWeight: 'bold',
-    textAlign: 'center',
+  inactiveLabel: {
+    fontSize: 10,
+    color: '#6B4F4F',
+    marginTop: 2,
   },
 });

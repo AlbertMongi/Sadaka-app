@@ -86,7 +86,7 @@ export default function SermonDetailScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={GOLD} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Sermon</Text>
+        <Text style={styles.headerTitle}>{sermon.name}</Text>
       </View>
 
       <Image
