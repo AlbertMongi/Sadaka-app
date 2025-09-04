@@ -1138,7 +1138,7 @@ export default function GiveScreen() {
 
                   {paymentMethod === 'Mobile money' ? (
                     <>
-                      <Text style={styles.label}>Mobile Network</Text>
+                      <Text style={styles.label}>Choose Mobile Network</Text>
                       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.networkContainer}>
                         {mobileNetworks.map((network) => (
                           <TouchableOpacity
@@ -1165,7 +1165,7 @@ export default function GiveScreen() {
                     </>
                   ) : (
                     <>
-                      <Text style={styles.label}>Card Number</Text>
+                      {/* <Text style={styles.label}>Card Number</Text>
                       <TextInput
                         style={styles.textInput}
                         value={cardNumber}
@@ -1198,7 +1198,7 @@ export default function GiveScreen() {
                             secureTextEntry
                           />
                         </View>
-                      </View>
+                      </View> */}
                     </>
                   )}
 
