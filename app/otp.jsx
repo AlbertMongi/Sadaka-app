@@ -19,7 +19,7 @@ import {
 const { width } = Dimensions.get('window');
 
 const API_BASE_URL =
-  Constants.expoConfig?.extra?.apiBaseUrl || 'http://192.168.100.24:8000';
+  Constants.expoConfig?.extra?.apiBaseUrl || '{BASE_URL}';
 
 export default function OTPVerification() {
   const OTP_LENGTH = 6;
@@ -96,7 +96,7 @@ export default function OTPVerification() {
     console.log('Verifying OTP:', entered);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/register/verify?token=${entered}`, {
+      const res = await fetch(`${API_BASE_URL}register/verify?token=${entered}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });

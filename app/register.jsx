@@ -13,7 +13,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 
-const API_BASE_URL = Constants.expoConfig?.extra?.apiBaseUrl || 'http://192.168.100.24:8000';
+import { BASE_URL } from './apiConfig'; // ✅ Adjust path as needed
+
+const API_BASE_URL = `${BASE_URL}`;
 
 export default function Register() {
   const router = useRouter();
@@ -65,7 +67,7 @@ export default function Register() {
         requestBody.email = email.trim();
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/register`, {
+      const response = await fetch(`${API_BASE_URL}/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
