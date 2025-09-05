@@ -96,7 +96,7 @@ export default function OTPVerification() {
     console.log('Verifying OTP:', entered);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/user/verify?token=${entered}`, {
+      const res = await fetch(`${API_BASE_URL}/user/verify?token=${entered}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });

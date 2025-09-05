@@ -747,6 +747,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
+import { BASE_URL } from '../apiConfig';
 
 const mobileNetworks = [
   {
@@ -800,7 +801,7 @@ export default function GiveScreen() {
   ];
 
   // API host
-  const getHost = () => 'http://192.168.100.24:8000';
+  const getHost = () => BASE_URL;
 
   // Token loading & authentication
   useEffect(() => {
@@ -817,7 +818,7 @@ export default function GiveScreen() {
     (async () => {
       try {
         setCommunitiesLoading(true);
-        const res = await fetch(`${getHost()}/api/communities/joined`, {
+        const res = await fetch(`${getHost()}/communities/joined`, {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
@@ -863,12 +864,12 @@ export default function GiveScreen() {
       setLoading(true);
       if (paymentMethod === 'Card payment') {
         // Simple redirect, no data sent
-        const paymentUrl = 'http://sadaka-project-sadakaapi-uszzu0-685c9d-194-163-184-63.traefik.me/';
+        const paymentUrl = `${getHost()}/payments/card`;
         await WebBrowser.openBrowserAsync(paymentUrl);
         showNotification('success', 'Redirecting to payment page...');
       } else {
         // Mobile money flow
-        const res = await fetch(`${getHost()}/api/contributions`, {
+        const res = await fetch(`${getHost()}/contributions`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

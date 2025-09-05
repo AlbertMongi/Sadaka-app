@@ -15,6 +15,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { BASE_URL } from './apiConfig'; 
 
 const { width } = Dimensions.get('window');
 
@@ -96,7 +97,7 @@ export default function OTPVerification() {
     console.log('Verifying OTP:', entered);
 
     try {
-      const res = await fetch(`${API_BASE_URL}register/verify?token=${entered}`, {
+      const res = await fetch(`${BASE_URL}/register/verify?token=${entered}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
