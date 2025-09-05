@@ -17,6 +17,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BASE_URL } from './apiConfig';// or wherever it's defined
+
 
 export default function TransactionHistory() {
   const [transactions, setTransactions] = useState([]);
@@ -37,7 +39,7 @@ export default function TransactionHistory() {
           return;
         }
 
-        const response = await fetch('http://192.168.100.24:8000/api/contributions/user', {
+        const response = await fetch(`${BASE_URL}/contributions/user`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
