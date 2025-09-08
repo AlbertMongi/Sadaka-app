@@ -111,7 +111,7 @@ const fetchJoinedCommunities = async () => {
 const fetchData = async () => {
   // User Profile (always fetch)
   setLoadingUser(true);
-  const userRes = await fetchWithToken('http://192.168.100.24:8000/api/user/profile');
+  const userRes = await fetchWithToken(`${BASE_URL}/user/profile`);
   if (userRes?.success && userRes.data) {
     setUser(userRes.data);
   }

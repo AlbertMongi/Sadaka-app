@@ -1,20 +1,20 @@
-import React, { useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
+import { useState } from 'react';
 import {
-  View,
+  Alert,
+  Animated,
+  SafeAreaView,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
-  Alert,
-  Animated,
+  View,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BASE_URL } from './apiConfig'; // ✅ Adjust path as needed
 
-const API_BASE_URL = `${BASE_URL}`;
+// const API_BASE_URL = `${BASE_URL}`;
 
 export default function Login() {
   const router = useRouter();
@@ -35,7 +35,7 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/user/login`, {
+      const response = await fetch(`${BASE_URL}/user/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phoneNo: phoneNumber }),
@@ -55,7 +55,7 @@ export default function Login() {
       }
     } catch (error) {
       console.error('Login error:', error); // ✅ Debug log
-      setErrorMessage('Network error. Please try again later.');
+      setErrorMessage('Network error. Please try again later.'+error);
     } finally {
       setLoading(false);
     }
