@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Dimensions,
-  Platform
+  Platform,
+  Animated,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,6 +33,10 @@ export default function Community() {
   const [activeTab, setActiveTab] = useState('my');
   const [error, setError] = useState(null);
   const [token, setToken] = useState(null);
+
+  // Animation states
+  const popularAnims = useRef([]);
+  const communityAnims = useRef([]);
 
   const getHost = () => BASE_URL;
 
@@ -79,6 +84,14 @@ export default function Community() {
 
         setPopularCommunities(formattedAll.slice(0, 6));
         setAllCommunities(formattedAll);
+        popularAnims.current = formattedAll.slice(0, 6).map(() => ({
+          fade: new Animated.Value(0),
+          slide: new Animated.Value(30),
+        }));
+        communityAnims.current = formattedAll.map(() => ({
+          fade: new Animated.Value(0),
+          slide: new Animated.Value(30),
+        }));
 
         // Fetch joined communities
         const myResponse = await fetch(`${getHost()}/communities/joined`, { headers });
@@ -93,12 +106,23 @@ export default function Community() {
         }));
 
         setMyCommunities(formattedMy);
+        if (activeTab === 'my') {
+          communityAnims.current = formattedMy.map(() => ({
+            fade: new Animated.Value(0),
+            slide: new Animated.Value(30),
+          }));
+        }
+
+        // Animate sections
+        animateSections();
       } catch (err) {
         console.error('Error fetching communities:', err);
         setError('Failed to load communities. Please try again.');
         setPopularCommunities([]);
         setAllCommunities([]);
         setMyCommunities([]);
+        popularAnims.current = [];
+        communityAnims.current = [];
       } finally {
         setLoading(false);
       }
@@ -106,6 +130,70 @@ export default function Community() {
 
     fetchCommunities();
   }, [token]);
+
+  useEffect(() => {
+    // Update animations when activeTab changes
+    if (activeTab === 'my') {
+      communityAnims.current = myCommunities.map(() => ({
+        fade: new Animated.Value(0),
+        slide: new Animated.Value(30),
+      }));
+    } else {
+      communityAnims.current = allCommunities.map(() => ({
+        fade: new Animated.Value(0),
+        slide: new Animated.Value(30),
+      }));
+    }
+    animateSections();
+  }, [activeTab, myCommunities, allCommunities]);
+
+  const animateSections = () => {
+    const animations = [];
+
+    // Animate popular communities
+    popularAnims.current.forEach((anim, index) => {
+      animations.push(
+        Animated.sequence([
+          Animated.delay(index * 100),
+          Animated.parallel([
+            Animated.timing(anim.fade, {
+              toValue: 1,
+              duration: 400,
+              useNativeDriver: true,
+            }),
+            Animated.timing(anim.slide, {
+              toValue: 0,
+              duration: 400,
+              useNativeDriver: true,
+            }),
+          ]),
+        ])
+      );
+    });
+
+    // Animate main communities (my or all)
+    communityAnims.current.forEach((anim, index) => {
+      animations.push(
+        Animated.sequence([
+          Animated.delay(index * 200),
+          Animated.parallel([
+            Animated.timing(anim.fade, {
+              toValue: 1,
+              duration: 400,
+              useNativeDriver: true,
+            }),
+            Animated.timing(anim.slide, {
+              toValue: 0,
+              duration: 400,
+              useNativeDriver: true,
+            }),
+          ]),
+        ])
+      );
+    });
+
+    Animated.parallel(animations).start();
+  };
 
   const filteredMy = myCommunities.filter((c) =>
     c.name.toLowerCase().includes(searchText.toLowerCase())
@@ -118,20 +206,27 @@ export default function Community() {
     setActiveTab(tab);
   };
 
-  const renderCommunityItem = ({ item }) => (
-    <TouchableOpacity
-      style={styles.communityItem}
-      activeOpacity={0.7}
-      onPress={() =>
-        router.push({ pathname: '/CommunityDetail', params: { communityId: item.id } })
-      }
+  const renderCommunityItem = ({ item, index }) => (
+    <Animated.View
+      style={{
+        opacity: communityAnims.current[index]?.fade || 0,
+        transform: [{ translateY: communityAnims.current[index]?.slide || 30 }],
+      }}
     >
-      <Image source={{ uri: item.image }} style={styles.communityImage} resizeMode="cover" />
-      <View style={styles.communityDetails}>
-        <Text style={styles.communityTitle}>{item.name}</Text>
-        <Text style={styles.communityDescription}>{item.description}</Text>
-      </View>
-    </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.communityItem}
+        activeOpacity={0.7}
+        onPress={() =>
+          router.push({ pathname: '/CommunityDetail', params: { communityId: item.id } })
+        }
+      >
+        <Image source={{ uri: item.image }} style={styles.communityImage} resizeMode="cover" />
+        <View style={styles.communityDetails}>
+          <Text style={styles.communityTitle}>{item.name}</Text>
+          <Text style={styles.communityDescription}>{item.description}</Text>
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
   );
 
   if (loading) {
@@ -147,11 +242,11 @@ export default function Community() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back-outline" size={26} color={GOLD} />
+          <Ionicons  />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Communities</Text>
         <TouchableOpacity onPress={() => router.push('/notification')}>
-          <Ionicons name="notifications-outline" size={26} color={GOLD} />
+          <Ionicons  />
         </TouchableOpacity>
       </View>
 
@@ -159,7 +254,6 @@ export default function Community() {
       <View style={styles.searchContainer}>
         <Ionicons name="search-outline" size={16} color="#888" style={styles.searchIcon} />
         <TextInput
-          placeholder="Search for a community"
           style={styles.searchInput}
           value={searchText}
           onChangeText={setSearchText}
@@ -188,21 +282,28 @@ export default function Community() {
               keyExtractor={(item) => item.id}
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.popularList}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.popularItem}
-                  activeOpacity={0.7}
-                  onPress={() =>
-                    router.push({ pathname: '/CommunityDetail', params: { communityId: item.id } })
-                  }
+              renderItem={({ item, index }) => (
+                <Animated.View
+                  style={{
+                    opacity: popularAnims.current[index]?.fade || 0,
+                    transform: [{ translateY: popularAnims.current[index]?.slide || 30 }],
+                  }}
                 >
-                  <Image
-                    source={{ uri: item.image }}
-                    style={styles.circularImage}
-                    resizeMode="cover"
-                  />
-                  <Text style={styles.popularText}>{item.name}</Text>
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.popularItem}
+                    activeOpacity={0.7}
+                    onPress={() =>
+                      router.push({ pathname: '/CommunityDetail', params: { communityId: item.id } })
+                    }
+                  >
+                    <Image
+                      source={{ uri: item.image }}
+                      style={styles.circularImage}
+                      resizeMode="cover"
+                    />
+                    <Text style={styles.popularText}>{item.name}</Text>
+                  </TouchableOpacity>
+                </Animated.View>
               )}
             />
 
@@ -229,79 +330,98 @@ export default function Community() {
     </View>
   );
 }
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', paddingHorizontal: 16, paddingTop: Platform.OS === 'ios' ? -40 : 2 },
+  container: { 
+    flex: 1, 
+    backgroundColor: '#fff', 
+    paddingHorizontal: 20, // increased from 16
+    paddingTop: Platform.OS === 'ios' ? -30 : 40, // slightly more top padding
+  },
   center: { justifyContent: 'center', alignItems: 'center' },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 20, // increased spacing
   },
-  headerTitle: { fontSize: 16, fontWeight: 'bold', color: '#000' },
-  searchContainer:{
-  flexDirection: 'row',
-  alignItems: 'center',
-  backgroundColor: '#FAFAFA',
-  borderRadius: 20,      // large enough for oval shape
-  paddingHorizontal: 10, // smaller horizontal padding
-  paddingVertical: 4,    // smaller vertical padding
-  borderWidth: 1,
-  borderColor: GOLD,
-  marginBottom: 12,
-  height: 36,            // fix height for consistent oval shape
-}
-  ,
-  searchIcon: { marginRight: 8 },
-  searchInput: { flex: 1, height: 30, fontSize: 14 },
+  headerTitle: { 
+    fontSize: 18, // increased
+    color: '#000', 
+    fontFamily: 'GothamBold' 
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FAFAFA',
+    borderRadius: 20, // slightly more rounded
+    paddingHorizontal: 14, // increased
+    paddingVertical: 6, // increased
+    borderWidth: 1,
+    borderColor: GOLD,
+    marginBottom: 14, // increased
+    height: 36, // increased from 36
+  },
+  searchIcon: { marginRight: 10 }, // slightly more spacing
+  searchInput: { 
+    flex: 1, 
+    height: 34, // slightly taller
+    fontSize: 15, // slightly larger
+    fontFamily: 'GothamRegular' 
+  },
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginBottom: 8,
+    fontSize: 15, // increased
+    marginBottom: 10, // slightly more spacing
     color: '#333333ff',
-    marginTop: 10,
-    
+    marginTop: 12, // increased
+    fontFamily: 'GothamBold',
   },
-  popularList: { paddingBottom: 10 },
-  popularItem: { marginRight: 12, alignItems: 'center', padding: 4 },
+  popularList: { paddingBottom: 14 }, // increased
+  popularItem: { marginRight: 14, alignItems: 'center', padding: 6 }, // slightly bigger
   circularImage: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 56, // increased
+    height: 56, // increased
+    borderRadius: 28,
     borderWidth: 1,
     borderColor: GOLD,
   },
-  popularText: { fontSize: 11, textAlign: 'center', color: '#555', marginTop: 4 },
+  popularText: { 
+    fontSize: 12, // slightly larger
+    textAlign: 'center', 
+    color: '#000000', 
+    marginTop: 6, // slightly larger spacing
+    fontFamily: 'GothamMedium',
+  },
   tabs: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: 12, // slightly larger
   },
   tabText: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginHorizontal: 16,
+    fontSize: 14, // slightly larger
+    marginHorizontal: 18,
+    fontFamily: 'GothamMedium',
   },
   activeTab: {
     color: GOLD,
     borderBottomWidth: 2,
     borderColor: GOLD,
-    paddingBottom: 4,
+    paddingBottom: 5,
+    fontFamily: 'GothamMedium',
   },
   inactiveTab: {
-    color: '#888',
-    paddingBottom: 4,
+    color: '#000000',
+    paddingBottom: 5,
+    fontFamily: 'GothamMedium',
   },
   communityItem: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFF',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 12,
-    marginRight: 12,
+    borderRadius: 12, // slightly larger
+    paddingHorizontal: 14, // increased
+    paddingVertical: 10, // increased
+    marginBottom: 14, // slightly increased
+    marginRight: 14,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -309,16 +429,36 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   communityImage: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 50, // increased
+    height: 50, // increased
+    borderRadius: 25,
     borderWidth: 1,
     borderColor: GOLD,
-    marginRight: 12,
+    marginRight: 14,
   },
   communityDetails: { flex: 1 },
-  communityTitle: { fontSize: 13.5, fontWeight: 'bold', color: '#000' },
-  communityDescription: { fontSize: 12, color: '#555', marginTop: 2 },
-  noCommunitiesText: { textAlign: 'center', color: '#888', marginTop: 15, fontSize: 12 },
-  errorText: { textAlign: 'center', color: 'red', marginBottom: 10 },
+  communityTitle: { 
+    fontSize: 14, // increased
+    color: '#000', 
+    fontFamily: 'GothamBold' 
+  },
+  communityDescription: { 
+    fontSize: 13, // slightly larger
+    color: '#555', 
+    marginTop: 3, 
+    fontFamily: 'GothamRegular' 
+  },
+  noCommunitiesText: { 
+    textAlign: 'center', 
+    color: '#888', 
+    marginTop: 18, // slightly more spacing
+    fontSize: 13, // slightly larger
+    fontFamily: 'GothamRegular',
+  },
+  errorText: { 
+    textAlign: 'center', 
+    color: 'red', 
+    marginBottom: 12, // slightly more spacing
+    fontFamily: 'GothamRegular',
+  },
 });

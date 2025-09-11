@@ -48,7 +48,7 @@ export default function Login() {
         // ✅ Store phone number only, since token isn't returned here
         await AsyncStorage.setItem('userPhoneNo', phoneNumber);
 
-        Alert.alert('Success', 'OTP sent to your phone!');
+        // Alert.alert('Success', 'OTP sent to your phone!');
         router.push('/otp');
       } else {
         setErrorMessage(data.message || 'Login failed. Please try again.');

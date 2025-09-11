@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,25 +10,32 @@ import {
   TouchableOpacity,
   Alert,
   SafeAreaView,
+  Animated,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Ionicons, MaterialIcons, Entypo, FontAwesome5 } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons, Entypo } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { BASE_URL } from './apiConfig'; // ✅ Correct path
+import { BASE_URL } from './apiConfig';
 
 const GOLD = '#FFA500';
-const SCREEN_WIDTH = Dimensions.get('window').width;
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const API_BASE = BASE_URL;
-
 
 export default function CommunityDetail() {
   const { communityId } = useLocalSearchParams();
   const router = useRouter();
-
   const [community, setCommunity] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const headerFadeAnim = useRef(new Animated.Value(0)).current;
+  const logoScaleAnim = useRef(new Animated.Value(0)).current;
+  const infoDropUpAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const buttonBounceAnim = useRef(new Animated.Value(1)).current;
+  const modalSlideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
 
   useEffect(() => {
     let isMounted = true;
@@ -73,10 +80,59 @@ export default function CommunityDetail() {
 
     fetchCommunity();
 
+    // Animate header fade-in
+    Animated.timing(headerFadeAnim, {
+      toValue: 1,
+      duration: 600,
+      useNativeDriver: true,
+    }).start();
+
+    // Animate logo scale
+    Animated.timing(logoScaleAnim, {
+      toValue: 1,
+      duration: 500,
+      useNativeDriver: true,
+    }).start();
+
+    // Animate info section drop-up
+    Animated.timing(infoDropUpAnim, {
+      toValue: 0,
+      duration: 800,
+      useNativeDriver: true,
+    }).start();
+
+    // Animate button bounce
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(buttonBounceAnim, {
+          toValue: 1.05,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(buttonBounceAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
     return () => {
       isMounted = false;
     };
   }, [communityId]);
+
+  useEffect(() => {
+    if (showConfirmModal) {
+      Animated.timing(modalSlideAnim, {
+        toValue: 0,
+        duration: 400,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      modalSlideAnim.setValue(SCREEN_HEIGHT);
+    }
+  }, [showConfirmModal]);
 
   const joinCommunity = async () => {
     if (!community) return;
@@ -115,7 +171,6 @@ export default function CommunityDetail() {
 
   const leaveCommunity = async () => {
     if (!community) return;
-
     setActionLoading(true);
 
     try {
@@ -139,7 +194,7 @@ export default function CommunityDetail() {
       if (res.ok && json.success) {
         setCommunity(prev => ({ ...prev, isMember: false }));
         Alert.alert('Success', 'You have left the community.');
-        router.replace('main/community');
+        router.navigate('main/community');
       } else {
         Alert.alert('Error', json.message || 'Failed to leave community.');
       }
@@ -147,29 +202,29 @@ export default function CommunityDetail() {
       Alert.alert('Error', `Network error: ${err.message}`);
     } finally {
       setActionLoading(false);
+      setShowConfirmModal(false);
     }
   };
 
   const leaveCommunityWithConfirm = () => {
-    Alert.alert(
-      'Confirm Leave',
-      'Are you sure you want to leave this community?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Leave', style: 'destructive', onPress: leaveCommunity },
-      ],
-      { cancelable: true }
-    );
+    setShowConfirmModal(true);
   };
 
   const handleMembershipToggle = () => {
     if (!community) return;
     if (community.isMember) {
-      leaveCommunity();
-      // To re-enable confirmation dialog, replace with leaveCommunityWithConfirm();
+      leaveCommunityWithConfirm();
     } else {
       joinCommunity();
     }
+  };
+
+  const closeConfirmModal = () => {
+    Animated.timing(modalSlideAnim, {
+      toValue: SCREEN_HEIGHT,
+      duration: 400,
+      useNativeDriver: true,
+    }).start(() => setShowConfirmModal(false));
   };
 
   if (loading) {
@@ -200,52 +255,72 @@ export default function CommunityDetail() {
     ? community.logo
     : `${API_BASE}/${community.logo}`;
 
-  // Icon mapping for fields
-  const iconMap = {
-    Description: <Ionicons name="document-text" size={16} color={GOLD} />,
-    Region: <Entypo name="map" size={16} color={GOLD} />,
-    District: <MaterialIcons name="location-city" size={16} color={GOLD} />,
-    Street: <Ionicons name="location-sharp" size={16} color={GOLD} />,
-    'Phone Number': <Ionicons name="call" size={16} color={GOLD} />,
-    Email: <MaterialIcons name="email" size={16} color={GOLD} />,
-  };
-
-  const FieldCard = ({ label, value }) => (
-    <View style={styles.card}>
-      <View style={styles.labelContainer}>
-        {iconMap[label]}
-        <Text style={styles.label}>{label}</Text>
-      </View>
-      <Text style={styles.value}>{value || 'N/A'}</Text>
-    </View>
-  );
-
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView
+      <Animated.View style={[styles.headerContainer, { opacity: headerFadeAnim }]}>
+        <TouchableOpacity onPress={() => router.navigate('main/community')}>
+          <Ionicons name="arrow-back" size={24} color={GOLD} />
+        </TouchableOpacity>
+      </Animated.View>
+
+      <Animated.ScrollView
         contentContainerStyle={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: logoScaleAnim } } }],
+          { useNativeDriver: true }
+        )}
+        scrollEventThrottle={16}
       >
-        <View style={styles.headerContainer}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={22} color={GOLD} />
-          </TouchableOpacity>
-          <Text style={styles.headerText} numberOfLines={1} ellipsizeMode="tail">
+        <Animated.View style={[styles.imageContainer, { transform: [{ scale: logoScaleAnim.interpolate({
+          inputRange: [-100, 0],
+          outputRange: [1.2, 1],
+          extrapolate: 'clamp',
+        }) }] }]}>
+          <Image source={{ uri: logoUri }} style={styles.logo} resizeMode="cover" />
+        </Animated.View>
+
+        <Animated.View style={[styles.infoContainer, { transform: [{ translateY: infoDropUpAnim }] }]}>
+          <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
             {community.name}
           </Text>
-        </View>
+          <Text style={styles.descriptionText}>
+            {community.description || 'No description provided.'}
+          </Text>
+          <View style={styles.detailRow}>
+            <Entypo name="map" size={16} color={GOLD} />
+            <Text style={styles.detailText}>
+              {community.region || 'N/A'}
+            </Text>
+          </View>
+          <View style={styles.detailRow}>
+            <MaterialIcons name="location-city" size={16} color={GOLD} />
+            <Text style={styles.detailText}>
+              {community.district || 'N/A'}
+            </Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Ionicons name="location-sharp" size={16} color={GOLD} />
+            <Text style={styles.detailText}>
+              {community.street || 'N/A'}
+            </Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Ionicons name="call" size={16} color={GOLD} />
+            <Text style={styles.detailText}>
+              {community.phoneNo || 'N/A'}
+            </Text>
+          </View>
+          <View style={styles.detailRow}>
+            <MaterialIcons name="email" size={16} color={GOLD} />
+            <Text style={styles.detailText}>
+              {community.email || 'N/A'}
+            </Text>
+          </View>
+        </Animated.View>
+      </Animated.ScrollView>
 
-        <View style={styles.logoContainer}>
-          <Image source={{ uri: logoUri }} style={styles.logo} resizeMode="cover" />
-        </View>
-
-        <FieldCard label="Description" value={community.description} />
-        <FieldCard label="Region" value={community.region} />
-        <FieldCard label="District" value={community.district} />
-        <FieldCard label="Street" value={community.street} />
-        <FieldCard label="Phone Number" value={community.phoneNo} />
-        <FieldCard label="Email" value={community.email} />
-
+      <Animated.View style={[styles.actionButtonContainer, { transform: [{ scale: buttonBounceAnim }] }]}>
         <TouchableOpacity
           style={[
             styles.actionButton,
@@ -263,7 +338,44 @@ export default function CommunityDetail() {
               : 'Follow Community'}
           </Text>
         </TouchableOpacity>
-      </ScrollView>
+      </Animated.View>
+
+      <Modal
+        visible={showConfirmModal}
+        animationType="none"
+        transparent
+        onRequestClose={closeConfirmModal}
+      >
+        <Pressable style={styles.modalOverlay} onPress={closeConfirmModal}>
+          <Animated.View style={[styles.modalContainer, { transform: [{ translateY: modalSlideAnim }] }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Confirm Leave</Text>
+              <TouchableOpacity onPress={closeConfirmModal}>
+                <Ionicons name="close" size={24} color={GOLD} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalText}>
+              Are you sure you want to leave {community.name}?
+            </Text>
+            <View style={styles.modalButtonContainer}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={closeConfirmModal}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.modalButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.leaveButton]}
+                onPress={leaveCommunity}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.modalButtonText}>Leave</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -279,82 +391,81 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
   },
-  scrollContainer: {
-    paddingHorizontal: 10,
-    paddingBottom: 40,
-    alignItems: 'center',
-    paddingTop: 30,
-  },
   headerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: SCREEN_WIDTH - 20,
-    marginBottom: 20,
-    marginLeft: 10,
+    position: 'absolute',
+    top: 16,
+    left: 16,
+    zIndex: 10,
+    padding: 8,
   },
-  backButton: {
-    paddingRight: 10,
+  scrollContainer: {
+    paddingBottom: 120,
+    paddingTop: 0, // Adjusted to ensure image starts at top
   },
-  headerText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#000',
-    flexShrink: 1,
-  },
-  logoContainer: {
-    backgroundColor: '#fff',
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    marginBottom: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 5,
+  imageContainer: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT * 0.55,
+    overflow: 'hidden',
   },
   logo: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: '100%',
+    height: '100%',
     backgroundColor: '#eee',
   },
-  card: {
+  infoContainer: {
+    padding: 24,
     backgroundColor: '#fff',
-    width: SCREEN_WIDTH - 20,
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginBottom: 14,
-    elevation: 2,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    marginTop: -32,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 5,
+    shadowOffset: { width: 0, height: -2 },
+    shadowRadius: 8,
+    elevation: 5,
   },
-  labelContainer: {
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111',
+    marginBottom: 8,
+    fontFamily: 'System',
+  },
+  descriptionText: {
+    fontSize: 15,
+    color: '#333',
+    lineHeight: 24,
+    marginBottom: 16,
+    fontFamily: 'System',
+  },
+  detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 8,
   },
-  label: {
-    color: GOLD,
-    fontSize: 14,
-    fontWeight: '700',
-    marginLeft: 6,
-  },
-  value: {
+  detailText: {
+    fontSize: 12,
+    fontWeight: '500',
     color: '#333',
-    fontSize: 14,
+    marginLeft: 8,
+    fontFamily: 'System',
+  },
+  actionButtonContainer: {
+    position: 'absolute',
+    bottom: 32,
+    left: 24,
+    right: 24,
   },
   actionButton: {
-    width: SCREEN_WIDTH - 20,
-    borderRadius: 8,
-    paddingVertical: 14,
-    marginTop: 16,
+    borderRadius: 24,
+    paddingVertical: 16,
     alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 8,
+    elevation: 6,
   },
   joinButton: {
     backgroundColor: GOLD,
@@ -365,10 +476,67 @@ const styles = StyleSheet.create({
   actionText: {
     color: '#fff',
     fontWeight: '600',
-    fontSize: 15,
+    fontSize: 16,
+    fontFamily: 'System',
   },
   errorText: {
     color: 'red',
     fontSize: 16,
+    textAlign: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'flex-end',
+  },
+  modalContainer: {
+    backgroundColor: '#fff',
+    padding: 24,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    marginHorizontal: 0,
+    elevation: 5,
+    width: SCREEN_WIDTH,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: GOLD,
+    fontFamily: 'System',
+  },
+  modalText: {
+    fontSize: 16,
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 24,
+    fontFamily: 'System',
+  },
+  modalButtonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginHorizontal: 8,
+  },
+  cancelButton: {
+    backgroundColor: '#f8f8f8',
+    borderWidth: 1,
+    borderColor: '#ccc',
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    fontFamily: 'System',
   },
 });

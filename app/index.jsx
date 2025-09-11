@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -8,37 +8,101 @@ import {
   StatusBar,
   Dimensions,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Swiper from 'react-native-swiper';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFonts } from 'expo-font';
+import * as SplashScreen from 'expo-splash-screen';
 
-// Fix for any timing issues
-if (typeof setImmediate === 'undefined') {
-  global.setImmediate = (fn, ...args) => setTimeout(fn, 0, ...args);
-}
-
-// Get screen dimensions
-const { height: screenHeight, width: screenWidth } = Dimensions.get('screen'); // Use 'screen' for full dimensions
+const { height: screenHeight, width: screenWidth } = Dimensions.get('screen');
 
 const images = [
   'https://images.pexels.com/photos/1666816/pexels-photo-1666816.jpeg',
   'https://images.pexels.com/photos/267559/pexels-photo-267559.jpeg',
 ];
 
+// Safe atob fallback
+const atob = global.atob
+  ? global.atob
+  : (input) => {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+      let str = input.replace(/=+$/, '');
+      let output = '';
+      if (str.length % 4 === 1) {
+        throw new Error("'atob' failed: The string to be decoded is not correctly encoded.");
+      }
+      for (let bc = 0, bs = 0, buffer, idx = 0; (buffer = str.charAt(idx++)); ) {
+        buffer = chars.indexOf(buffer);
+        bs = bc % 4 ? bs * 64 + buffer : buffer;
+        bc++;
+        if (bc % 4) {
+          output += String.fromCharCode(255 & (bs >> ((-2 * bc) & 6)));
+        }
+      }
+      return output;
+    };
+
+const isTokenExpired = (token) => {
+  if (!token) return true;
+  try {
+    const payloadBase64 = token.split('.')[1];
+    const decodedPayload = JSON.parse(atob(payloadBase64));
+    const exp = decodedPayload.exp;
+    return !exp || exp < Math.floor(Date.now() / 1000);
+  } catch {
+    return true;
+  }
+};
+
 export default function GetStarted() {
   const router = useRouter();
+  const [appIsReady, setAppIsReady] = useState(false);
+
+  const [fontsLoaded] = useFonts({
+    GothamBold: require('../assets/fonts/Gotham-Bold.ttf'),
+    GothamLight: require('../assets/fonts/Gotham-Light.ttf'),
+    GothamRegular: require('../assets/fonts/Gotham-Book.otf'),
+    GothamMedium: require('../assets/fonts/Gotham-Medium.ttf'),
+  });
+
+  useEffect(() => {
+    async function prepare() {
+      try {
+        await SplashScreen.preventAutoHideAsync();
+
+        // Wait for fonts
+        if (!fontsLoaded) return;
+
+        // Check token
+        const userToken = await AsyncStorage.getItem('userToken');
+        if (userToken && !isTokenExpired(userToken)) {
+          router.replace('/main/index1');
+        }
+
+        // Delay to simulate loading if needed
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      } catch (e) {
+        console.warn(e);
+      } finally {
+        setAppIsReady(true);
+        await SplashScreen.hideAsync();
+      }
+    }
+
+    prepare();
+  }, [fontsLoaded]);
+
+  if (!appIsReady || !fontsLoaded) {
+    return null; // Let SplashScreen stay
+  }
 
   return (
     <View style={styles.container}>
-      {/* Make StatusBar transparent and overlay content */}
-      <StatusBar 
-        translucent={true} 
-        backgroundColor="transparent" 
-        barStyle="light-content" 
-      />
+      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
 
-      {/* Full-screen Swiper that covers entire screen */}
       <View style={styles.swiperContainer}>
         <Swiper
           autoplay
@@ -49,10 +113,10 @@ export default function GetStarted() {
           activeDotStyle={styles.activeDot}
           paginationStyle={styles.pagination}
         >
-          {images.map((image, index) => (
+          {images.map((uri, index) => (
             <ImageBackground
               key={index}
-              source={{ uri: image }}
+              source={{ uri }}
               resizeMode="cover"
               style={styles.fullscreenImage}
             >
@@ -62,7 +126,6 @@ export default function GetStarted() {
         </Swiper>
       </View>
 
-      {/* Overlay UI - Positioned absolutely over swiper */}
       <View style={styles.overlayContent}>
         <View style={styles.textWrapper}>
           <Text style={styles.heading}>Welcome to</Text>
@@ -70,17 +133,9 @@ export default function GetStarted() {
           <Text style={styles.subText}>Connect. Worship. Grow Together.</Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.button}
-          onPress={() => router.push('/login')}
-        >
+        <TouchableOpacity style={styles.button} onPress={() => router.push('/register')}>
           <Text style={styles.buttonText}>Get Started</Text>
-          <Ionicons
-            name="arrow-forward"
-            size={18}
-            color="#fff"
-            style={{ marginLeft: 6 }}
-          />
+          <Ionicons name="arrow-forward" size={18} color="#fff" style={{ marginLeft: 6 }} />
         </TouchableOpacity>
       </View>
     </View>
@@ -88,63 +143,36 @@ export default function GetStarted() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000', // Fallback background color
-  },
-  swiperContainer: {
-    position: 'absolute',
-    top: 0, // Ensure it starts at the very top
-    left: 0,
-    right: 0,
-    bottom: 0,
-    width: screenWidth,
-    height: screenHeight, // Full screen height, including status bar
-  },
-  fullscreenImage: {
-    width: screenWidth,
-    height: screenHeight, // Full screen height, including status bar
-    flex: 1, // Ensure it takes up all available space
-    position: 'absolute', // Ensure image starts at top-left
-    top: 0,
-    left: 0,
-  },
+  container: { flex: 1, backgroundColor: '#000' },
+  swiperContainer: { position: 'absolute', width: screenWidth, height: screenHeight },
+  fullscreenImage: { width: screenWidth, height: screenHeight },
   overlay: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)', // Semi-transparent overlay
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   overlayContent: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    ...StyleSheet.absoluteFillObject,
     paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'android' 
-      ? (StatusBar.currentHeight || 0) + 20 // Reduced padding to bring text closer to top
-      : 40, // Adjusted for iOS
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 20 : 40,
     paddingBottom: 40,
   },
-  textWrapper: {
-    alignItems: 'center',
-    marginTop: 0, // Remove margin to position text closer to top
-  },
+  textWrapper: { alignItems: 'center' },
   heading: {
     fontSize: 22,
     color: '#fff',
-    fontWeight: '400',
     marginBottom: 6,
     letterSpacing: 1,
+    fontFamily: 'GothamLight',
   },
   appName: {
     fontSize: 42,
-    fontWeight: '700',
     color: '#FF8C00',
     letterSpacing: 1,
+    fontFamily: 'GothamBold',
   },
   subText: {
     marginTop: 10,
@@ -153,6 +181,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: 30,
     lineHeight: 20,
+    fontFamily: 'GothamRegular',
   },
   button: {
     backgroundColor: '#FF8C00',
@@ -167,7 +196,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     shadowRadius: 5,
     elevation: 5,
-    position: 'absolute', // Keep button at bottom
+    position: 'absolute',
     bottom: 40,
     left: 24,
     right: 24,
@@ -175,13 +204,11 @@ const styles = StyleSheet.create({
   buttonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: 'GothamBold',
   },
-  pagination: {
-    bottom: 80, // Position dots above the button
-  },
+  pagination: { bottom: 80 },
   dot: {
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: 'rgba(255,255,255,0.3)',
     width: 6,
     height: 6,
     borderRadius: 3,

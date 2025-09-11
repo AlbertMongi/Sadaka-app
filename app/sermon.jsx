@@ -6,16 +6,18 @@ import {
   StyleSheet,
   Image,
   ActivityIndicator,
+  Animated,
   ScrollView,
   Dimensions,
   TouchableOpacity,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import { BASE_URL } from './apiConfig'; // ✅ Adjust path as needed
 
-const { width } = Dimensions.get('window');
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const GOLD = '#FF8C00';
 const FALLBACK_IMAGE = 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTb_oySS2-AZYC97VkAwMB1NKY1Wm1qHy_CeQ&s';
-const GOLD = '#FFA500';
 
 export default function SermonDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -23,6 +25,8 @@ export default function SermonDetailScreen() {
 
   const [sermon, setSermon] = useState(null);
   const [loading, setLoading] = useState(true);
+  const scrollY = React.useRef(new Animated.Value(0)).current;
+  const dropUpAnim = React.useRef(new Animated.Value(SCREEN_HEIGHT)).current;
 
   async function fetchWithToken(url) {
     try {
@@ -30,17 +34,11 @@ export default function SermonDetailScreen() {
       if (!token) throw new Error('No token found');
 
       const res = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
-      if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
-      }
-
-      const json = await res.json();
-      return json;
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      return await res.json();
     } catch (error) {
       console.error('Fetch error:', error);
       return null;
@@ -51,21 +49,25 @@ export default function SermonDetailScreen() {
     if (!id) return;
 
     const loadSermon = async () => {
-      const res = await fetchWithToken(`http://192.168.100.24:8000/api/sermons/${id}`);
-      if (res?.success && res.data) {
-        setSermon(res.data);
-      } else {
-        setSermon(null);
-      }
+      const res = await fetchWithToken(`${BASE_URL}/sermons/${id}`);
+      if (res?.success && res.data) setSermon(res.data);
+      else setSermon(null);
       setLoading(false);
     };
 
     loadSermon();
+
+    // Animate drop-up
+    Animated.timing(dropUpAnim, {
+      toValue: 0,
+      duration: 800,
+      useNativeDriver: true,
+    }).start();
   }, [id]);
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={styles.centered}>
         <ActivityIndicator size="large" color={GOLD} />
       </View>
     );
@@ -73,100 +75,111 @@ export default function SermonDetailScreen() {
 
   if (!sermon) {
     return (
-      <View style={styles.errorContainer}>
+      <View style={styles.centered}>
         <Text style={styles.errorText}>Sermon not found.</Text>
       </View>
     );
   }
 
+  const imageScale = scrollY.interpolate({
+    inputRange: [-100, 0],
+    outputRange: [1.2, 1],
+    extrapolate: 'clamp',
+  });
+
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      {/* Back Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+    <View style={styles.container}>
+      {/* Back Arrow Header */}
+      <View style={styles.headerContainer}>
+        <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color={GOLD} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{sermon.name}</Text>
       </View>
 
-      <Image
-        source={{ uri: sermon.photo || FALLBACK_IMAGE }}
-        style={styles.image}
-        resizeMode="cover"
-      />
+      <Animated.ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+          useNativeDriver: true,
+        })}
+        scrollEventThrottle={16}
+      >
+        {/* Full-Screen Image */}
+        <Animated.View style={[styles.imageContainer, { transform: [{ scale: imageScale }] }]}>
+          <Image
+            source={{ uri: sermon.photo || FALLBACK_IMAGE }}
+            style={styles.image}
+            resizeMode="cover"
+          />
+        </Animated.View>
 
-      <Text style={styles.title}>{sermon.name}</Text>
-      {/* <Text style={styles.speaker}>By: {sermon.speaker || 'Unknown Speaker'}</Text> */}
-      <Text style={styles.description}>{sermon.description || 'No description provided.'}</Text>
-    </ScrollView>
+        {/* Drop-Up Info Section */}
+        <Animated.View style={[styles.infoContainer, { transform: [{ translateY: dropUpAnim }] }]}>
+          <Text style={styles.headerTitle}>{sermon.name}</Text>
+          <Text style={styles.infoText}>
+            {sermon.description || 'No description provided.'}
+          </Text>
+        </Animated.View>
+      </Animated.ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
-    padding: 16,
-    backgroundColor: '#fff',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  backButton: {
-    padding: 8,
-    marginRight: 12,
-    borderRadius: 20,
-    backgroundColor: '#f7f7f7',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#222',
-  },
-  image: {
-    width: width - 32,
-    height: 200,
-    borderRadius: 12,
-    marginBottom: 20,
-    backgroundColor: '#ccc',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: '700',
-    marginBottom: 8,
-    color: '#222',
-  },
-  speaker: {
-    fontSize: 14,
-    color: '#888',
-    marginBottom: 12,
-  },
-  description: {
-    fontSize: 16,
-    color: '#555',
-    lineHeight: 24,
-  },
-  loadingContainer: {
+  container: { flex: 1, backgroundColor: '#fff' },
+  scroll: { flex: 1 },
+  scrollContent: { paddingBottom: 120 },
+  centered: {
     flex: 1,
-    backgroundColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 100,
-  },
-  errorContainer: {
-    flex: 1,
-    backgroundColor: '#fff',
-    paddingTop: 100,
-    alignItems: 'center',
+    paddingHorizontal: 20,
   },
   errorText: {
+    color: 'red',
     fontSize: 16,
-    color: '#888',
+    textAlign: 'center',
+    fontFamily: 'GothamMedium',
+  },
+  headerContainer: {
+    position: 'absolute',
+    top: 16,
+    left: 16,
+    zIndex: 10,
+    padding: 8,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: 12,
+  },
+  imageContainer: {
+    width: '100%',
+    height: SCREEN_HEIGHT * 0.55,
+    overflow: 'hidden',
+  },
+  image: { width: '100%', height: '100%' },
+  infoContainer: {
+    padding: 24,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    marginTop: -32,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: -2 },
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111',
+    marginBottom: 8,
+    fontFamily: 'GothamBold',
+  },
+  infoText: {
+    fontSize: 15,
+    color: '#333',
+    lineHeight: 24,
+    fontFamily: 'GothamRegular',
   },
 });

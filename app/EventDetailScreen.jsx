@@ -4,17 +4,21 @@ import {
   Text,
   StyleSheet,
   ActivityIndicator,
+  Animated,
   ScrollView,
   Image,
   SafeAreaView,
   TouchableOpacity,
   Alert,
+  Dimensions,
+  Share,
 } from 'react-native';
-import { Ionicons, Entypo, MaterialIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { BASE_URL } from './apiConfig'; // ✅ Correct path
+import { BASE_URL } from './apiConfig';
 
 const GOLD = '#FF8C00';
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function EventDetailScreen() {
   const navigation = useNavigation();
@@ -22,6 +26,8 @@ export default function EventDetailScreen() {
   const [eventData, setEventData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const scrollY = React.useRef(new Animated.Value(0)).current;
+  const dropUpAnim = React.useRef(new Animated.Value(SCREEN_HEIGHT)).current;
 
   const eventId = route?.params?.id;
 
@@ -52,6 +58,13 @@ export default function EventDetailScreen() {
     };
 
     fetchEventDetails();
+
+    // Animate drop-up effect
+    Animated.timing(dropUpAnim, {
+      toValue: 0,
+      duration: 800,
+      useNativeDriver: true,
+    }).start();
   }, [eventId]);
 
   const handleNotifyAttendance = async () => {
@@ -71,6 +84,23 @@ export default function EventDetailScreen() {
     }
   };
 
+  const handleShare = async () => {
+    try {
+      const result = await Share.share({
+        message: `Join me at ${eventData.name}! ${eventData.description} on ${new Date(eventData.eventDate).toLocaleDateString()}. Location: ${eventData.street}, ${eventData.district}, ${eventData.region}.`,
+        url: eventData.imageUrl,
+        title: eventData.name,
+      });
+
+      if (result.action === Share.sharedAction) {
+        // Shared
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to share the event.');
+      console.error(error);
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -87,39 +117,31 @@ export default function EventDetailScreen() {
     );
   }
 
-  const FieldCard = ({ icon, label, value }) => (
-    <View style={styles.card}>
-      <View style={styles.labelContainer}>
-        {icon}
-        <Text style={styles.label}>{label}</Text>
-      </View>
-      <Text style={styles.value}>{value || 'N/A'}</Text>
-    </View>
-  );
+  const imageScale = scrollY.interpolate({
+    inputRange: [-100, 0],
+    outputRange: [1.2, 1],
+    extrapolate: 'clamp',
+  });
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
+      {/* Back Arrow at Top */}
       <View style={styles.headerContainer}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Ionicons name="arrow-back" size={24} color={GOLD} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
-            {eventData.name}
-          </Text>
-          <View style={{ width: 24 }} />
-        </View>
+        <TouchableOpacity onPress={() => navigation.navigate('main', { screen: 'bible' })}>
+          <Ionicons name="arrow-back" size={24} color={GOLD} />
+        </TouchableOpacity>
       </View>
 
       {/* Content */}
-      <ScrollView
+      <Animated.ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
+        scrollEventThrottle={16}
       >
-        {/* Event Image */}
-        <View style={styles.imageBox}>
+        {/* Full Screen Image */}
+        <Animated.View style={[styles.imageContainer, { transform: [{ scale: imageScale }] }]}>
           <Image
             source={{
               uri: eventData.imageUrl || 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTb_oySS2-AZYC97VkAwMB1NKY1Wm1qHy_CeQ&s',
@@ -127,36 +149,77 @@ export default function EventDetailScreen() {
             style={styles.image}
             resizeMode="cover"
           />
-        </View>
+        </Animated.View>
 
-        {/* Description */}
-        <FieldCard
-          icon={<Ionicons name="document-text" size={16} color={GOLD} />}
-          label="Description"
-          value={eventData.description || 'No description provided.'}
-        />
+        {/* Drop-Up Info Section */}
+        <Animated.View
+          style={[
+            styles.infoContainer,
+            { transform: [{ translateY: dropUpAnim }] },
+            // Apply shadow only after loading is complete
+            !loading && {
+              shadowColor: '#000',
+              shadowOpacity: 0.1,
+              shadowOffset: { width: 0, height: -2 },
+              shadowRadius: 8,
+              elevation: 5,
+            },
+          ]}
+        >
+          {/* Centered Event Name */}
+          <View style={styles.titleWrapper}>
+            <Text style={styles.headerTitle} numberOfLines={2}>
+              {eventData.name}
+            </Text>
+          </View>
 
-        {/* Location */}
-        <FieldCard icon={<Entypo name="map" size={16} color={GOLD} />} label="Region" value={eventData.region} />
-        <FieldCard icon={<MaterialIcons name="location-city" size={16} color={GOLD} />} label="District" value={eventData.district} />
-        <FieldCard icon={<Ionicons name="location" size={16} color={GOLD} />} label="Street" value={eventData.street} />
+          <Text style={styles.infoText}>
+            {`${eventData.description || 'No description provided.'}`}
+          </Text>
+          <View style={styles.detailRow}>
+            <Ionicons name="location-outline" size={16} color={GOLD} />
+            <Text style={styles.detailText}>
+              {`${eventData.street}, ${eventData.district}, ${eventData.region}`}
+            </Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Ionicons name="calendar-outline" size={16} color={GOLD} />
+            <Text style={styles.detailText}>
+              {new Date(eventData.eventDate).toLocaleDateString(undefined, {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+              })}
+            </Text>
+          </View>
+          <View style={styles.iconRow}>
+            <TouchableOpacity style={styles.smallIconButton} onPress={handleShare}>
+              <Ionicons name="share-social-outline" size={16} color={GOLD} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.smallIconButton} onPress={handleNotifyAttendance}>
+              <Ionicons name="checkmark-circle-outline" size={16} color={GOLD} />
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      </Animated.ScrollView>
 
-        {/* Date */}
-        <FieldCard
-          icon={<Ionicons name="calendar" size={16} color={GOLD} />}
-          label="Date"
-          value={new Date(eventData.eventDate).toLocaleDateString(undefined, {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-          })}
-        />
-      </ScrollView>
-
-      {/* Notify Button */}
-      <TouchableOpacity style={styles.attendButton} onPress={handleNotifyAttendance}>
-        <Text style={styles.attendButtonText}>I will be there</Text>
+      {/* Floating Attend Button */}
+      <TouchableOpacity
+        style={[
+          styles.attendButton,
+          // Apply shadow only after loading is complete
+          !loading && {
+            shadowColor: '#000',
+            shadowOpacity: 0.15,
+            shadowOffset: { width: 0, height: 4 },
+            shadowRadius: 8,
+            elevation: 6,
+          },
+        ]}
+        onPress={handleNotifyAttendance}
+      >
+        <Text style={styles.attendButtonText}>Join</Text>
       </TouchableOpacity>
     </SafeAreaView>
   );
@@ -171,8 +234,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 120,
   },
   centered: {
     flex: 1,
@@ -182,85 +244,95 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: 'red',
-    fontSize: 14,
+    fontSize: 16,
     textAlign: 'center',
+    fontFamily: 'GothamMedium',
   },
   headerContainer: {
-    borderBottomWidth: 1,
-    borderColor: '#eee',
-    backgroundColor: '#fff',
+    position: 'absolute',
+    top: 16,
+    left: 16,
+    zIndex: 10,
+    padding: 8,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: 12,
   },
-  header: {
-    flexDirection: 'row',
+  titleWrapper: {
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    marginBottom: 16,
+    paddingVertical: 10,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: '700',
-    color: '#222',
-    flex: 1,
+    color: '#111',
     textAlign: 'center',
-    marginHorizontal: 10,
+    fontFamily: 'GothamBold',
   },
-  imageBox: {
+  imageContainer: {
     width: '100%',
-    height: 220,
-    borderRadius: 16,
+    height: SCREEN_HEIGHT * 0.55,
     overflow: 'hidden',
-    backgroundColor: '#eee',
-    marginBottom: 20,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 3 },
-    shadowRadius: 5,
   },
   image: {
     width: '100%',
     height: '100%',
   },
-  card: {
+  infoContainer: {
+    padding: 24,
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 14,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.07,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    marginTop: -32,
+    borderWidth: 0, // Ensure no border appears
   },
-  labelContainer: {
+  infoText: {
+    fontSize: 15,
+    color: '#333',
+    lineHeight: 24,
+    marginBottom: 16,
+    fontFamily: 'GothamRegular',
+  },
+  detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 8,
   },
-  label: {
-    fontSize: 14,
-    color: GOLD,
-    fontWeight: '600',
-    marginLeft: 6,
-  },
-  value: {
-    fontSize: 14,
+  detailText: {
+    fontSize: 12,
+    fontWeight: '500',
     color: '#333',
-    lineHeight: 20,
+    marginLeft: 8,
+    fontFamily: 'GothamMedium',
+  },
+  iconRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+  },
+  smallIconButton: {
+    marginRight: 16,
+    padding: 8,
+    backgroundColor: '#f8f8f8',
+    borderRadius: 12,
   },
   attendButton: {
+    position: 'absolute',
+    bottom: 32,
+    left: 24,
+    right: 24,
     backgroundColor: GOLD,
-    paddingVertical: 14,
-    marginHorizontal: 16,
-    borderRadius: 10,
+    paddingVertical: 16,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+    borderWidth: 0, // Ensure no border appears
   },
   attendButtonText: {
     color: '#fff',
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
+    fontFamily: 'GothamBold',
   },
 });

@@ -92,7 +92,7 @@ android {
         applicationId 'com.monxtar66.sadakaapp'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-         versionCode 3   // increment this for every update
+         versionCode 4   // increment this for every update
         versionName "1.2"
     }
     signingConfigs {

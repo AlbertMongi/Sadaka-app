@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,12 +13,16 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
+  Animated,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { BASE_URL } from './apiConfig';// or wherever it's defined
+import { BASE_URL } from './apiConfig';
 
+const GOLD = '#FF8C00';
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function TransactionHistory() {
   const [transactions, setTransactions] = useState([]);
@@ -26,6 +30,8 @@ export default function TransactionHistory() {
   const [selectedTxn, setSelectedTxn] = useState(null);
   const [loading, setLoading] = useState(false);
   const navigation = useNavigation();
+  const headerFadeAnim = useRef(new Animated.Value(0)).current;
+  const modalSlideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
 
   useEffect(() => {
     const fetchTransactions = async () => {
@@ -63,9 +69,20 @@ export default function TransactionHistory() {
               month: dateObj.toLocaleString('default', { month: 'short' }),
               title: 'Contribution',
               type: 'Credit',
+              anim: new Animated.Value(0), // Animation value for each card
             };
           });
           setTransactions(mapped);
+
+          // Animate cards with staggered effect
+          mapped.forEach((item, index) => {
+            Animated.timing(item.anim, {
+              toValue: 1,
+              duration: 300,
+              delay: index * 100,
+              useNativeDriver: true,
+            }).start();
+          });
         } else {
           Alert.alert('Error', json.message || 'Failed to load transactions.');
         }
@@ -77,13 +94,67 @@ export default function TransactionHistory() {
     };
 
     fetchTransactions();
+
+    // Animate header fade-in
+    Animated.timing(headerFadeAnim, {
+      toValue: 1,
+      duration: 600,
+      useNativeDriver: true,
+    }).start();
   }, []);
+
+  useEffect(() => {
+    if (selectedTxn) {
+      // Animate modal slide-up
+      Animated.timing(modalSlideAnim, {
+        toValue: 0,
+        duration: 400,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      // Reset modal position
+      modalSlideAnim.setValue(SCREEN_HEIGHT);
+    }
+  }, [selectedTxn]);
 
   const filteredTransactions = transactions.filter(txn =>
     `${txn.title} ${txn.purpose}`.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const closeModal = () => setSelectedTxn(null);
+  const closeModal = () => {
+    Animated.timing(modalSlideAnim, {
+      toValue: SCREEN_HEIGHT,
+      duration: 400,
+      useNativeDriver: true,
+    }).start(() => setSelectedTxn(null));
+  };
+
+  const renderItem = ({ item }) => (
+    <Animated.View style={[styles.card, { opacity: item.anim, transform: [{ scale: item.anim }] }]}>
+      <TouchableOpacity style={styles.touchableCard} onPress={() => setSelectedTxn(item)}>
+        <View style={styles.dateBadge}>
+          <Text style={styles.dateText}>{item.date}</Text>
+          <Text style={styles.monthText}>{item.month}</Text>
+        </View>
+        <View style={styles.info}>
+          <Text style={styles.title}>{item.title}</Text>
+          <Text style={styles.description}>{item.purpose}</Text>
+          <Text style={styles.type}>{item.type}</Text>
+          <Text style={styles.status}>Status: {item.status}</Text>
+        </View>
+        <View style={styles.amountContainer}>
+          <Text
+            style={[
+              styles.amount,
+              { color: item.amount >= 0 ? '#0a8a00' : '#d32f2f' },
+            ]}
+          >
+            {item.amount >= 0 ? '+' : '-'}Tz{Math.abs(item.amount)}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
+  );
 
   return (
     <SafeAreaView style={styles.safeContainer}>
@@ -92,14 +163,14 @@ export default function TransactionHistory() {
         style={{ flex: 1 }}
       >
         <View style={styles.container}>
-          {/* Header */}
-          <View style={styles.header}>
-            <TouchableOpacity onPress={() => navigation.goBack()}>
-              <Ionicons name="arrow-back" size={24} color="#FF8C00" />
+          {/* Animated Header */}
+          <Animated.View style={[styles.header, { opacity: headerFadeAnim }]}>
+            <TouchableOpacity onPress={() => navigation.navigate('main', { screen: 'contribution' })}>
+              <Ionicons name="arrow-back" size={24} color={GOLD} />
             </TouchableOpacity>
             <Text style={styles.headerText}>Transaction History</Text>
             <View style={{ width: 24 }} />
-          </View>
+          </Animated.View>
 
           {/* Search */}
           <View style={styles.searchContainer}>
@@ -115,7 +186,7 @@ export default function TransactionHistory() {
 
           {/* Loader */}
           {loading ? (
-            <ActivityIndicator size="large" color="#FF8C00" style={{ marginTop: 20 }} />
+            <ActivityIndicator size="large" color={GOLD} style={{ marginTop: 20 }} />
           ) : (
             <FlatList
               data={filteredTransactions}
@@ -123,60 +194,30 @@ export default function TransactionHistory() {
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingBottom: 40 }}
               ListEmptyComponent={<Text style={styles.noResults}>No transactions found.</Text>}
-              renderItem={({ item }) => (
-                <TouchableOpacity style={styles.card} onPress={() => setSelectedTxn(item)}>
-                  <View style={styles.dateBadge}>
-                    <Text style={styles.dateText}>{item.date}</Text>
-                    <Text style={styles.monthText}>{item.month}</Text>
-                  </View>
-                  <View style={styles.info}>
-                    <Text style={styles.title}>{item.title}</Text>
-                    <Text style={styles.description}>{item.purpose}</Text>
-                    <Text style={styles.type}>{item.type}</Text>
-                    <Text style={styles.status}>Status: {item.status}</Text>
-                  </View>
-                  <View style={styles.amountContainer}>
-                    <Text
-                      style={[
-                        styles.amount,
-                        { color: item.amount >= 0 ? '#0a8a00' : '#d32f2f' },
-                      ]}
-                    >
-                      {item.amount >= 0 ? '+' : '-'}Tz{Math.abs(item.amount)}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              )}
+              renderItem={renderItem}
             />
           )}
 
           {/* Modal */}
           <Modal
             visible={!!selectedTxn}
-            animationType="slide"
+            animationType="none"
             transparent
             onRequestClose={closeModal}
           >
             <Pressable style={styles.modalOverlay} onPress={closeModal}>
-              <View style={styles.modalContainer}>
-                <Text style={styles.modalTitle}>Transaction Details</Text>
-
-                {/* <Text style={styles.modalLabel}>ID:</Text>
-                <Text style={styles.modalText}>{selectedTxn?.id}</Text>
-
-                <Text style={styles.modalLabel}>User ID:</Text>
-                <Text style={styles.modalText}>{selectedTxn?.userId}</Text>
-
-                <Text style={styles.modalLabel}>Community ID:</Text>
-                <Text style={styles.modalText}>{selectedTxn?.communityId}</Text> */}
-
-                <Text style={styles.modalLabel}>Purpose:</Text>
+              <Animated.View style={[styles.modalContainer, { transform: [{ translateY: modalSlideAnim }] }]}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Transaction Details</Text>
+                  <TouchableOpacity onPress={closeModal}>
+                    <Ionicons name="close" size={24} color={GOLD} />
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.modalLabel}>Purpose</Text>
                 <Text style={styles.modalText}>{selectedTxn?.purpose}</Text>
-
-                <Text style={styles.modalLabel}>Status:</Text>
+                <Text style={styles.modalLabel}>Status</Text>
                 <Text style={styles.modalText}>{selectedTxn?.status}</Text>
-
-                <Text style={styles.modalLabel}>Amount:</Text>
+                <Text style={styles.modalLabel}>Amount</Text>
                 <Text
                   style={[
                     styles.modalText,
@@ -185,12 +226,11 @@ export default function TransactionHistory() {
                 >
                   {selectedTxn?.amount >= 0 ? '+' : '-'}Tz{Math.abs(selectedTxn?.amount)}
                 </Text>
-
-                <Text style={styles.modalLabel}>Date:</Text>
+                <Text style={styles.modalLabel}>Date</Text>
                 <Text style={styles.modalText}>
                   {selectedTxn?.date} {selectedTxn?.month}
                 </Text>
-              </View>
+              </Animated.View>
             </Pressable>
           </Modal>
         </View>
@@ -207,7 +247,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingTop:  Platform.OS === 'ios' ? -40 : 2, 
+    paddingTop: Platform.OS === 'ios' ? -40 : 40,
   },
   header: {
     flexDirection: 'row',
@@ -228,7 +268,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: '#FF8C00',
+    borderColor: GOLD,
     marginBottom: 16,
   },
   searchIcon: {
@@ -246,24 +286,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   card: {
+    marginBottom: 12,
+  },
+  touchableCard: {
     flexDirection: 'row',
     backgroundColor: '#fff',
     borderRadius: 16,
-    marginBottom: 12,
     padding: 12,
     alignItems: 'center',
-
-    // Shadow for iOS
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.12,
     shadowRadius: 6,
-
-    // Elevation for Android
     elevation: 3,
   },
   dateBadge: {
-    backgroundColor: '#FF8C00',
+    backgroundColor: GOLD,
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 12,
@@ -303,7 +341,7 @@ const styles = StyleSheet.create({
   },
   status: {
     fontSize: 11,
-    color: '#FF8C00',
+    color: GOLD,
     fontWeight: '600',
     marginTop: 2,
   },
@@ -327,12 +365,16 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 16,
     elevation: 5,
   },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
   modalTitle: {
     fontSize: 20,
     fontWeight: '700',
-    marginBottom: 12,
-    color: '#FF8C00',
-    textAlign: 'center',
+    color: GOLD,
   },
   modalLabel: {
     fontWeight: '600',
