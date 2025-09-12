@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -14,6 +13,8 @@ import {
   Keyboard,
   SafeAreaView,
   Image,
+  RefreshControl,
+  Animated,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -59,6 +60,7 @@ export default function GiveScreen() {
   const [joinedCommunities, setJoinedCommunities] = useState([]);
   const [loading, setLoading] = useState(false);
   const [communitiesLoading, setCommunitiesLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [notification, setNotification] = useState({ visible: false, type: '', message: '' });
 
   // Dropdown options
@@ -66,6 +68,7 @@ export default function GiveScreen() {
     { label: 'Tithe', value: 'Tithe' },
     { label: 'Missions', value: 'Missions' },
     { label: 'General Fund', value: 'General Fund' },
+    { label: 'Vow', value: 'Vow' },
   ];
   const frequencies = ['One time', 'Weekly', 'Monthly', 'Every two weeks'];
   const paymentOptions = [
@@ -86,27 +89,44 @@ export default function GiveScreen() {
   }, []);
 
   // Load joined communities
-  useEffect(() => {
+  const fetchCommunities = async () => {
     if (!token) return;
-    (async () => {
-      try {
-        setCommunitiesLoading(true);
-        const res = await fetch(`${getHost()}/communities/joined`, {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        const json = await res.json();
-        setJoinedCommunities(res.ok && Array.isArray(json.data) ? json.data : []);
-      } catch (e) {
-        console.error('Error loading communities', e);
-        setJoinedCommunities([]);
-      } finally {
-        setCommunitiesLoading(false);
-      }
-    })();
+    try {
+      setCommunitiesLoading(true);
+      const res = await fetch(`${getHost()}/communities/joined`, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const json = await res.json();
+      setJoinedCommunities(res.ok && Array.isArray(json.data) ? json.data : []);
+    } catch (e) {
+      console.error('Error loading communities', e);
+      setJoinedCommunities([]);
+    } finally {
+      setCommunitiesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (token) fetchCommunities();
   }, [token]);
+
+  // Pull-to-refresh handler
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await AsyncStorage.removeItem('my_communities');
+    setOffering('');
+    setFrequency('One time');
+    setAmount('');
+    setLocation('');
+    setMobileNumber('');
+    setSelectedNetwork(mobileNetworks[0].name);
+    setPaymentMethod('Mobile money');
+    await fetchCommunities();
+    setRefreshing(false);
+  };
 
   // Formatting amount input
   const formatAmountWithCommas = (val) => {
@@ -136,12 +156,10 @@ export default function GiveScreen() {
     try {
       setLoading(true);
       if (paymentMethod === 'Card payment') {
-        // Simple redirect, no data sent
         const paymentUrl = `${getHost()}/payments/card`;
         await WebBrowser.openBrowserAsync(paymentUrl);
         showNotification('success', 'Redirecting to payment page...');
       } else {
-        // Mobile money flow
         const res = await fetch(`${getHost()}/contributions`, {
           method: 'POST',
           headers: {
@@ -164,7 +182,6 @@ export default function GiveScreen() {
         showNotification('success', 'Thank you! Your contribution has been sent.');
       }
 
-      // Reset form
       setShowPaymentModal(false);
       setOffering('');
       setFrequency('One time');
@@ -186,11 +203,29 @@ export default function GiveScreen() {
   const getSelectedLocationLabel = () => (joinedCommunities.find(c => c.id === location)?.name || 'Select community');
   const getSelectedPaymentLabel = () => (paymentOptions.find(o => o.value === paymentMethod)?.label || 'Select payment method');
 
-  // Custom dropdown component
+  // Custom dropdown component with animation
   const CustomDropdown = ({ options, selectedValue, onSelect, placeholder, disabled }) => {
     const [isOpen, setIsOpen] = useState(false);
+    const fadeAnim = useRef(new Animated.Value(0)).current;
+    const slideAnim = useRef(new Animated.Value(10)).current;
+
+    useEffect(() => {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }, []);
+
     return (
-      <View style={styles.dropdownContainer}>
+      <Animated.View style={[styles.dropdownContainer, { opacity: fadeAnim, transform: [{ translateY: slideAnim }], zIndex: 1000 }]}>
         <TouchableOpacity
           style={[styles.customDropdown, disabled && styles.disabledDropdown]}
           disabled={disabled}
@@ -219,7 +254,7 @@ export default function GiveScreen() {
             </ScrollView>
           </View>
         )}
-      </View>
+      </Animated.View>
     );
   };
 
@@ -237,18 +272,35 @@ export default function GiveScreen() {
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 20} style={styles.keyboardView}>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" ref={scrollRef} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            contentContainerStyle={styles.container}
+            keyboardShouldPersistTaps="handled"
+            ref={scrollRef}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={['#FF8C00']}
+                tintColor="#FF8C00"
+              />
+            }
+          >
             <View style={styles.header}>
-              <TouchableOpacity onPress={() => navigation.goBack()}><Ionicons   color="#FF8C00" /></TouchableOpacity>
+              <TouchableOpacity onPress={() => navigation.goBack()}>
+                <Ionicons name="arrow-back" size={20} color="#FF8C00" />
+              </TouchableOpacity>
               <Text style={styles.headerTitle}>Give</Text>
               <View style={styles.headerIcons}>
-                <TouchableOpacity onPress={() => navigation.navigate('history')}><Ionicons name="receipt-outline" size={20} color="#FF8C00" /></TouchableOpacity>
+                <TouchableOpacity onPress={() => navigation.navigate('history')}>
+                  <Ionicons name="receipt-outline" size={20} color="#FF8C00" />
+                </TouchableOpacity>
               </View>
             </View>
 
             <Notification visible={notification.visible} type={notification.type} message={notification.message} />
 
-                  <Text style={styles.label}>Give to</Text>
+            <Text style={styles.label}>Give to</Text>
             <CustomDropdown
               options={joinedCommunities.map(c => ({ label: c.name, value: c.id }))}
               selectedValue={getSelectedLocationLabel()}
@@ -256,7 +308,6 @@ export default function GiveScreen() {
               placeholder="Select community"
               disabled={communitiesLoading}
             />
-
 
             <Text style={styles.label}>Frequency</Text>
             <View style={styles.frequencyContainer}>
@@ -278,9 +329,9 @@ export default function GiveScreen() {
                 placeholderTextColor="#999"
               />
             </View>
-                  <Text style={styles.label}>What's your offering?</Text>
-            <CustomDropdown options={offeringOptions} selectedValue={getSelectedOfferingLabel()} onSelect={setOffering} placeholder="Select offering" />
 
+            <Text style={styles.label}>What's your offering?</Text>
+            <CustomDropdown options={offeringOptions} selectedValue={getSelectedOfferingLabel()} onSelect={setOffering} placeholder="Select offering" />
 
             <TouchableOpacity style={styles.continueButton} onPress={() => setShowPaymentModal(true)}>
               <Text style={styles.continueText}>Continue</Text>
@@ -330,7 +381,7 @@ export default function GiveScreen() {
                 )}
 
                 <TouchableOpacity style={styles.submitButton} onPress={sendContribution} disabled={loading}>
-                  <Text style={styles.submitText}>{loading ? 'Sending...' : 'Submit'}</Text>
+                  <Text style={styles.submitText}>{loading ? 'Sending...' : 'Send'}</Text>
                 </TouchableOpacity>
               </View>
             </KeyboardAvoidingView>
@@ -340,6 +391,7 @@ export default function GiveScreen() {
     </SafeAreaView>
   );
 }
+
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#fff' },
   keyboardView: { flex: 1 },
@@ -369,7 +421,11 @@ const styles = StyleSheet.create({
     color: '#333',
     marginTop: 8,
   },
-  dropdownContainer: { position: 'relative', marginBottom: 12 },
+  dropdownContainer: { 
+    position: 'relative', 
+    marginBottom: 12, 
+    zIndex: 1000,
+  },
   customDropdown: {
     borderWidth: 1,
     borderColor: '#FF8C00',
@@ -401,13 +457,14 @@ const styles = StyleSheet.create({
     top: 42,
     left: 0,
     right: 0,
-    zIndex: 1000,
+    zIndex: 2000,
+    minHeight: 40,
     maxHeight: 180,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 5,
   },
   dropdownItem: {
     flexDirection: 'row',
@@ -436,7 +493,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   freqButtonActive: {
-    backgroundColor: '#FF8C00',
+    backgroundColor: '#E18731',
   },
   freqText: {
     fontSize: 12,
@@ -450,7 +507,7 @@ const styles = StyleSheet.create({
   },
   amountBox: {
     borderWidth: 1,
-    borderColor: '#FF8C00',
+    borderColor: '#E18731',
     borderRadius: 6,
     paddingVertical: 8,
     paddingHorizontal: 8,
@@ -467,17 +524,18 @@ const styles = StyleSheet.create({
     fontFamily: 'GothamRegular',
   },
   amount: {
-    fontSize: 20,
-    color: '#333',
+    fontSize: 30,
+    color: '#000000',
     textAlign: 'center',
     width: '100%',
+    fontWeight: 500,
     minHeight: 28,
-    fontFamily: 'GothamBold',
+    fontFamily: 'GothamMedium',
   },
   continueButton: {
-    backgroundColor: '#FF8C00',
-    borderRadius: 6,
-    paddingVertical: 10,
+    backgroundColor: '#E18731',
+    borderRadius: 30,
+    paddingVertical: 15,
     paddingHorizontal: 24,
     alignItems: 'center',
     marginTop: 12,
@@ -490,7 +548,7 @@ const styles = StyleSheet.create({
   },
   textInput: {
     borderWidth: 1,
-    borderColor: '#FF8C00',
+    borderColor: '#E18731',
     borderRadius: 6,
     paddingVertical: 8,
     paddingHorizontal: 8,
@@ -550,22 +608,23 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   networkButtonActive: {
-    borderColor: '#FF8C00',
+    borderColor: '#E18731',
   },
   networkLogo: {
     width: 40,
     height: 40,
   },
   submitButton: {
-    backgroundColor: '#FF8C00',
+    backgroundColor: '#E18731',
     borderWidth: 1,
-    borderColor: '#FF8C00',
-    borderRadius: 6,
-    paddingVertical: 10,
+    borderColor: '#E18731',
+    borderRadius: 999,
+    paddingVertical: 15,
     paddingHorizontal: 24,
     alignItems: 'center',
-    marginTop: 12,
+    marginTop: Platform.OS === 'android' ? 40 : 20,
     width: '100%',
+    bottom: Platform.OS === 'android' ? 30 : 20,
   },
   submitText: {
     color: '#fff',
@@ -580,7 +639,7 @@ const styles = StyleSheet.create({
   },
   notificationSuccess: {
     backgroundColor: '#E6FFE6',
-    borderColor: '#00CC00',
+    borderColor: '#E18731',
     borderWidth: 1,
   },
   notificationError: {

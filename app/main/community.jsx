@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,10 +7,11 @@ import {
   FlatList,
   Image,
   TouchableOpacity,
-  ActivityIndicator,
   Dimensions,
-  Platform,
   Animated,
+  RefreshControl,
+  SafeAreaView,
+  Button,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,9 +19,67 @@ import { useRouter } from 'expo-router';
 import { BASE_URL } from '../apiConfig';
 
 const GOLD = '#FFA500';
-const FALLBACK_IMAGE =
-  'https://m.media-amazon.com/images/I/816Etq5qEwL._AC_SL1500_.jpg';
+const FALLBACK_IMAGE = 'https://m.media-amazon.com/images/I/816Etq5qEwL._AC_SL1500_.jpg';
 const { width } = Dimensions.get('window');
+
+const SkeletonLoader = ({ style }) => {
+  const animatedValue = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(animatedValue, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(animatedValue, {
+          toValue: 0,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [animatedValue]);
+
+  const backgroundColor = animatedValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['#e0e0e0', '#f5f5f5'],
+  });
+
+  return <Animated.View style={[style, { backgroundColor }]} />;
+};
+
+const PopularCommunitiesSkeleton = () => (
+  <FlatList
+    data={[1, 2, 3, 4]}
+    horizontal
+    showsHorizontalScrollIndicator={false}
+    contentContainerStyle={[styles.popularList, { backgroundColor: '#fff' }]}
+    keyExtractor={(item, index) => index.toString()}
+    renderItem={() => (
+      <View style={styles.popularItem}>
+        <SkeletonLoader style={styles.circularImage} />
+        <SkeletonLoader style={{ width: 80, height: 12, marginTop: 6, borderRadius: 4 }} />
+      </View>
+    )}
+  />
+);
+
+const CommunitiesSkeleton = () => (
+  <View style={{ paddingHorizontal: 14, paddingTop: 8, marginTop: 18, backgroundColor: '#fff' }}>
+    {[1, 2, 3].map((_, index) => (
+      <View key={index} style={[styles.communityItem, { backgroundColor: '#fff' }]}>
+        <SkeletonLoader style={styles.communityImage} />
+        <View style={styles.communityDetails}>
+          <SkeletonLoader style={{ width: '80%', height: 14, marginBottom: 6, borderRadius: 4 }} />
+          <SkeletonLoader style={{ width: '60%', height: 12, marginBottom: 4, borderRadius: 4 }} />
+          <SkeletonLoader style={{ width: '40%', height: 12, borderRadius: 4 }} />
+        </View>
+      </View>
+    ))}
+  </View>
+);
 
 export default function Community() {
   const router = useRouter();
@@ -29,7 +87,10 @@ export default function Community() {
   const [popularCommunities, setPopularCommunities] = useState([]);
   const [allCommunities, setAllCommunities] = useState([]);
   const [myCommunities, setMyCommunities] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loadingPopular, setLoadingPopular] = useState(false);
+  const [loadingAll, setLoadingAll] = useState(false);
+  const [loadingMy, setLoadingMy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('my');
   const [error, setError] = useState(null);
   const [token, setToken] = useState(null);
@@ -40,6 +101,27 @@ export default function Community() {
 
   const getHost = () => BASE_URL;
 
+  const fetchWithRetry = async (url, options, retries = 3, delay = 1000) => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const response = await fetch(url, options);
+        if (!response.ok) {
+          if (response.status === 401) {
+            setError('Session expired. Please login again.');
+            router.replace('/login');
+            return null;
+          }
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        return await response.json();
+      } catch (err) {
+        console.error(`Fetch attempt ${i + 1} failed:`, err);
+        if (i === retries - 1) throw err;
+        await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
+      }
+    }
+  };
+
   useEffect(() => {
     const loadToken = async () => {
       try {
@@ -47,110 +129,130 @@ export default function Community() {
         if (savedToken) {
           setToken(savedToken);
         } else {
-          setError('User token not found. Please login again.');
+          setError('Please log in to view communities.');
           router.replace('/login');
         }
       } catch (e) {
-        setError('Failed to load token. Please login again.');
+        setError('Failed to initialize session. Please try again.');
+        console.error('Token load error:', e);
       }
     };
     loadToken();
-  }, []);
+  }, [router]);
 
-  useEffect(() => {
+  const fetchCommunities = useCallback(async () => {
     if (!token) return;
 
-    const fetchCommunities = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const headers = {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        };
+    setRefreshing(true);
+    setError(null);
 
-        // Fetch all communities
-        const allResponse = await fetch(`${getHost()}/communities`, { headers });
-        if (!allResponse.ok) throw new Error('Failed to fetch all communities');
-        const allResult = await allResponse.json();
-        const allData = Array.isArray(allResult.data) ? allResult.data : [];
+    const headers = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    };
 
-        const formattedAll = allData.map((c) => ({
-          id: c.id.toString(),
-          name: c.name,
-          description: c.description || 'No description available',
-          image: c.logo || FALLBACK_IMAGE,
-        }));
+    // Fetch all communities
+    setLoadingAll(true);
+    setLoadingPopular(true);
+    try {
+      const cacheKeyAll = 'all_communities';
+      let allData = [];
+      const cachedAll = await AsyncStorage.getItem(cacheKeyAll);
 
-        setPopularCommunities(formattedAll.slice(0, 6));
-        setAllCommunities(formattedAll);
-        popularAnims.current = formattedAll.slice(0, 6).map(() => ({
-          fade: new Animated.Value(0),
-          slide: new Animated.Value(30),
-        }));
+      if (cachedAll) {
+        allData = JSON.parse(cachedAll);
+      } else {
+        const allResult = await fetchWithRetry(`${getHost()}/communities`, { headers });
+        if (!allResult) return;
+        allData = Array.isArray(allResult.data) ? allResult.data : [];
+        await AsyncStorage.setItem(cacheKeyAll, JSON.stringify(allData));
+      }
+
+      const formattedAll = allData.map((c) => ({
+        id: c.id.toString(),
+        name: c.name || 'Unnamed Community',
+        description: c.description || 'No description available',
+        image: c.logo || FALLBACK_IMAGE,
+        memberCount: c.memberCount || 0,
+      }));
+
+      setAllCommunities(formattedAll);
+      setPopularCommunities(formattedAll);
+
+      popularAnims.current = formattedAll.map(() => ({
+        fade: new Animated.Value(0),
+        slide: new Animated.Value(30),
+      }));
+      if (activeTab === 'all') {
         communityAnims.current = formattedAll.map(() => ({
           fade: new Animated.Value(0),
           slide: new Animated.Value(30),
         }));
-
-        // Fetch joined communities
-        const myResponse = await fetch(`${getHost()}/communities/joined`, { headers });
-        const myResult = await myResponse.json();
-        const myData = Array.isArray(myResult.data) ? myResult.data : [];
-
-        const formattedMy = myData.map((c) => ({
-          id: c.id.toString(),
-          name: c.name,
-          description: c.description || 'No description available',
-          image: c.logo || FALLBACK_IMAGE,
-        }));
-
-        setMyCommunities(formattedMy);
-        if (activeTab === 'my') {
-          communityAnims.current = formattedMy.map(() => ({
-            fade: new Animated.Value(0),
-            slide: new Animated.Value(30),
-          }));
-        }
-
-        // Animate sections
-        animateSections();
-      } catch (err) {
-        console.error('Error fetching communities:', err);
-        setError('Failed to load communities. Please try again.');
-        setPopularCommunities([]);
-        setAllCommunities([]);
-        setMyCommunities([]);
-        popularAnims.current = [];
-        communityAnims.current = [];
-      } finally {
-        setLoading(false);
       }
-    };
+    } catch (err) {
+      console.error('Error fetching all communities:', err);
+      setError('Failed to load communities. Check your internet connection and try again.');
+      setAllCommunities([]);
+      setPopularCommunities([]);
+      popularAnims.current = [];
+    } finally {
+      setLoadingAll(false);
+      setLoadingPopular(false);
+    }
 
-    fetchCommunities();
-  }, [token]);
+    // Fetch joined communities
+    setLoadingMy(true);
+    try {
+      const cacheKeyMy = 'my_communities';
+      let myData = [];
+      const cachedMy = await AsyncStorage.getItem(cacheKeyMy);
+
+      if (cachedMy) {
+        myData = JSON.parse(cachedMy);
+      } else {
+        const myResult = await fetchWithRetry(`${getHost()}/communities/joined`, { headers });
+        if (!myResult) return;
+        myData = Array.isArray(myResult.data) ? myResult.data : [];
+        await AsyncStorage.setItem(cacheKeyMy, JSON.stringify(myData));
+      }
+
+      const formattedMy = myData.map((c) => ({
+        id: c.id.toString(),
+        name: c.name || 'Unnamed Community',
+        description: c.description || 'No description available',
+        image: c.logo || FALLBACK_IMAGE,
+        memberCount: c.memberCount || 0,
+      }));
+
+      setMyCommunities(formattedMy);
+      if (activeTab === 'my') {
+        communityAnims.current = formattedMy.map(() => ({
+          fade: new Animated.Value(0),
+          slide: new Animated.Value(30),
+        }));
+      }
+    } catch (err) {
+      console.error('Error fetching joined communities:', err);
+      setError('Failed to load your communities. Check your internet connection and try again.');
+      setMyCommunities([]);
+      communityAnims.current = [];
+    } finally {
+      setLoadingMy(false);
+      setRefreshing(false);
+    }
+
+    animateSections();
+  }, [token, activeTab, router]);
 
   useEffect(() => {
-    // Update animations when activeTab changes
-    if (activeTab === 'my') {
-      communityAnims.current = myCommunities.map(() => ({
-        fade: new Animated.Value(0),
-        slide: new Animated.Value(30),
-      }));
-    } else {
-      communityAnims.current = allCommunities.map(() => ({
-        fade: new Animated.Value(0),
-        slide: new Animated.Value(30),
-      }));
+    if (token) {
+      fetchCommunities();
     }
-    animateSections();
-  }, [activeTab, myCommunities, allCommunities]);
+  }, [token, fetchCommunities]);
 
   const animateSections = () => {
     const animations = [];
 
-    // Animate popular communities
     popularAnims.current.forEach((anim, index) => {
       animations.push(
         Animated.sequence([
@@ -171,7 +273,6 @@ export default function Community() {
       );
     });
 
-    // Animate main communities (my or all)
     communityAnims.current.forEach((anim, index) => {
       animations.push(
         Animated.sequence([
@@ -195,6 +296,18 @@ export default function Community() {
     Animated.parallel(animations).start();
   };
 
+  const onRefresh = () => {
+    setRefreshing(true);
+    AsyncStorage.removeItem('all_communities');
+    AsyncStorage.removeItem('my_communities');
+    fetchCommunities();
+  };
+
+  const retryFetch = () => {
+    setError(null);
+    fetchCommunities();
+  };
+
   const filteredMy = myCommunities.filter((c) =>
     c.name.toLowerCase().includes(searchText.toLowerCase())
   );
@@ -204,13 +317,18 @@ export default function Community() {
 
   const handleTabPress = (tab) => {
     setActiveTab(tab);
+    communityAnims.current = (tab === 'my' ? filteredMy : filteredAll).map(() => ({
+      fade: new Animated.Value(0),
+      slide: new Animated.Value(30),
+    }));
+    animateSections();
   };
 
   const renderCommunityItem = ({ item, index }) => (
     <Animated.View
       style={{
-        opacity: communityAnims.current[index]?.fade || 0,
-        transform: [{ translateY: communityAnims.current[index]?.slide || 30 }],
+        opacity: communityAnims.current[index]?.fade || 1,
+        transform: [{ translateY: communityAnims.current[index]?.slide || 0 }],
       }}
     >
       <TouchableOpacity
@@ -220,132 +338,190 @@ export default function Community() {
           router.push({ pathname: '/CommunityDetail', params: { communityId: item.id } })
         }
       >
-        <Image source={{ uri: item.image }} style={styles.communityImage} resizeMode="cover" />
+        <Image
+          source={{ uri: item.image }}
+          style={styles.communityImage}
+          resizeMode="cover"
+          defaultSource={{ uri: FALLBACK_IMAGE }}
+        />
         <View style={styles.communityDetails}>
           <Text style={styles.communityTitle}>{item.name}</Text>
-          <Text style={styles.communityDescription}>{item.description}</Text>
+          <Text
+            style={styles.communityDescription}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {item.description}
+          </Text>
+          <Text style={styles.memberCount}>
+            {item.memberCount} {item.memberCount === 1 ? 'Member' : 'Members'}
+          </Text>
         </View>
       </TouchableOpacity>
     </Animated.View>
   );
 
-  if (loading) {
+  if (!token && !error) {
     return (
-      <View style={[styles.container, styles.center]}>
-        <ActivityIndicator size="large" color={GOLD} />
-      </View>
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+        <View style={[styles.container, styles.center, { backgroundColor: '#fff' }]}>
+          <CommunitiesSkeleton />
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons  />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Communities</Text>
-        <TouchableOpacity onPress={() => router.push('/notification')}>
-          <Ionicons  />
-        </TouchableOpacity>
-      </View>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+      <View style={[styles.container, { backgroundColor: '#fff' }]}>
+        {/* Header */}
+        <View style={[styles.header, { backgroundColor: '#fff' }]}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={24} color="#E18731" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Communities</Text>
+          <TouchableOpacity onPress={() => router.push('/notification')}>
+            <Ionicons name="notifications-outline" size={24} color="#E18731" />
+          </TouchableOpacity>
+        </View>
 
-      {/* Search */}
-      <View style={styles.searchContainer}>
-        <Ionicons name="search-outline" size={16} color="#888" style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          value={searchText}
-          onChangeText={setSearchText}
-          autoCorrect={false}
-          autoCapitalize="none"
+        {/* Search */}
+        <View style={[styles.searchContainer, { backgroundColor: '#FAFAFA' }]}>
+          <Ionicons name="search-outline" size={16} color="#888" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            value={searchText}
+            onChangeText={setSearchText}
+            placeholder="Search communities..."
+            placeholderTextColor="#888"
+            autoCorrect={false}
+            autoCapitalize="none"
+          />
+        </View>
+
+        {error && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+            <Button title="Retry" onPress={retryFetch} color={GOLD} />
+          </View>
+        )}
+
+        <FlatList
+          data={activeTab === 'my' ? filteredMy : filteredAll}
+          keyExtractor={(item) => item.id}
+          renderItem={renderCommunityItem}
+          contentContainerStyle={{ paddingBottom: 40, paddingTop: 8, backgroundColor: '#fff' }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[GOLD]}
+              tintColor={GOLD}
+            />
+          }
+          ListEmptyComponent={
+            (loadingAll && activeTab === 'all') || (loadingMy && activeTab === 'my') ? (
+              <CommunitiesSkeleton />
+            ) : (
+              <Text style={styles.noCommunitiesText}>
+                {activeTab === 'my'
+                  ? 'You have not joined any communities.'
+                  : 'No communities found.'}
+              </Text>
+            )
+          }
+          ListHeaderComponent={
+            <>
+              <Text style={styles.sectionTitle}>Popular Communities</Text>
+              {loadingPopular ? (
+                <PopularCommunitiesSkeleton />
+              ) : popularCommunities.length > 0 ? (
+                <FlatList
+                  data={popularCommunities}
+                  horizontal
+                  keyExtractor={(item) => item.id}
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={[styles.popularList, { backgroundColor: '#fff' }]}
+                  renderItem={({ item, index }) => (
+                    <Animated.View
+                      style={{
+                        opacity: popularAnims.current[index]?.fade || 1,
+                        transform: [{ translateY: popularAnims.current[index]?.slide || 0 }],
+                      }}
+                    >
+                      <TouchableOpacity
+                        style={styles.popularItem}
+                        activeOpacity={0.7}
+                        onPress={() =>
+                          router.push({ pathname: '/CommunityDetail', params: { communityId: item.id } })
+                        }
+                      >
+                        <Image
+                          source={{ uri: item.image }}
+                          style={styles.circularImage}
+                          resizeMode="cover"
+                          defaultSource={{ uri: FALLBACK_IMAGE }}
+                        />
+                        <Text style={styles.popularText} numberOfLines={1}>
+                          {item.name}
+                        </Text>
+                      </TouchableOpacity>
+                    </Animated.View>
+                  )}
+                />
+              ) : (
+                <Text style={styles.noCommunitiesText}>No popular communities found.</Text>
+              )}
+
+              {/* Tabs */}
+              <View style={styles.tabs}>
+                <TouchableOpacity onPress={() => handleTabPress('my')}>
+                  <Text
+                    style={[styles.tabText, activeTab === 'my' ? styles.activeTab : styles.inactiveTab]}
+                  >
+                    My Communities
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => handleTabPress('all')}>
+                  <Text
+                    style={[styles.tabText, activeTab === 'all' ? styles.activeTab : styles.inactiveTab]}
+                    >
+                    All Communities
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          }
         />
       </View>
-
-      {error && <Text style={styles.errorText}>{error}</Text>}
-
-      {/* Main vertical FlatList */}
-      <FlatList
-        data={activeTab === 'my' ? filteredMy : filteredAll}
-        keyExtractor={(item) => item.id}
-        renderItem={renderCommunityItem}
-        contentContainerStyle={{ paddingBottom: 40, paddingTop: 8 }}
-        ListEmptyComponent={
-          <Text style={styles.noCommunitiesText}>No communities found</Text>
-        }
-        ListHeaderComponent={
-          <>
-            <Text style={styles.sectionTitle}>Popular Communities</Text>
-            <FlatList
-              data={popularCommunities}
-              horizontal
-              keyExtractor={(item) => item.id}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.popularList}
-              renderItem={({ item, index }) => (
-                <Animated.View
-                  style={{
-                    opacity: popularAnims.current[index]?.fade || 0,
-                    transform: [{ translateY: popularAnims.current[index]?.slide || 30 }],
-                  }}
-                >
-                  <TouchableOpacity
-                    style={styles.popularItem}
-                    activeOpacity={0.7}
-                    onPress={() =>
-                      router.push({ pathname: '/CommunityDetail', params: { communityId: item.id } })
-                    }
-                  >
-                    <Image
-                      source={{ uri: item.image }}
-                      style={styles.circularImage}
-                      resizeMode="cover"
-                    />
-                    <Text style={styles.popularText}>{item.name}</Text>
-                  </TouchableOpacity>
-                </Animated.View>
-              )}
-            />
-
-            {/* Tabs */}
-            <View style={styles.tabs}>
-              <TouchableOpacity onPress={() => handleTabPress('my')}>
-                <Text
-                  style={[styles.tabText, activeTab === 'my' ? styles.activeTab : styles.inactiveTab]}
-                >
-                  My Communities
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => handleTabPress('all')}>
-                <Text
-                  style={[styles.tabText, activeTab === 'all' ? styles.activeTab : styles.inactiveTab]}
-                >
-                  All Communities
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </>
-        }
-      />
-    </View>
+    </SafeAreaView>
   );
 }
+
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
     backgroundColor: '#fff', 
-    paddingHorizontal: 20, // increased from 16
-    paddingTop: Platform.OS === 'ios' ? -30 : 40, // slightly more top padding
+    paddingHorizontal: 20,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
-  center: { justifyContent: 'center', alignItems: 'center' },
+  center: { 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20, // increased spacing
+    marginBottom: 20,
+    backgroundColor: '#fff',
   },
   headerTitle: { 
-    fontSize: 18, // increased
+    fontSize: 18,
     color: '#000', 
     fontFamily: 'GothamBold' 
   },
@@ -353,51 +529,61 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FAFAFA',
-    borderRadius: 20, // slightly more rounded
-    paddingHorizontal: 14, // increased
-    paddingVertical: 6, // increased
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
     borderWidth: 1,
     borderColor: GOLD,
-    marginBottom: 14, // increased
-    height: 36, // increased from 36
+    marginBottom: 14,
+    height: 36,
   },
-  searchIcon: { marginRight: 10 }, // slightly more spacing
+  searchIcon: { 
+    marginRight: 10 
+  },
   searchInput: { 
     flex: 1, 
-    height: 34, // slightly taller
-    fontSize: 15, // slightly larger
-    fontFamily: 'GothamRegular' 
+    height: 34,
+    fontSize: 15,
+    fontFamily: 'GothamRegular',
+    color: '#000',
   },
   sectionTitle: {
-    fontSize: 15, // increased
-    marginBottom: 10, // slightly more spacing
-    color: '#333333ff',
-    marginTop: 12, // increased
+    fontSize: 15,
+    marginBottom: 10,
+    color: '#333',
     fontFamily: 'GothamBold',
   },
-  popularList: { paddingBottom: 14 }, // increased
-  popularItem: { marginRight: 14, alignItems: 'center', padding: 6 }, // slightly bigger
+  popularList: { 
+    paddingBottom: 14,
+    backgroundColor: '#fff',
+  },
+  popularItem: { 
+    marginRight: 14, 
+    alignItems: 'center', 
+    padding: 6,
+    width: 100,
+  },
   circularImage: {
-    width: 56, // increased
-    height: 56, // increased
+    width: 60,
+    height: 60,
     borderRadius: 28,
     borderWidth: 1,
     borderColor: GOLD,
   },
   popularText: { 
-    fontSize: 12, // slightly larger
+    fontSize: 12,
     textAlign: 'center', 
-    color: '#000000', 
-    marginTop: 6, // slightly larger spacing
+    color: '#000', 
+    marginTop: 6,
     fontFamily: 'GothamMedium',
   },
   tabs: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginBottom: 12, // slightly larger
+    marginBottom: 12,
   },
   tabText: {
-    fontSize: 14, // slightly larger
+    fontSize: 14,
     marginHorizontal: 18,
     fontFamily: 'GothamMedium',
   },
@@ -406,59 +592,67 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderColor: GOLD,
     paddingBottom: 5,
-    fontFamily: 'GothamMedium',
+    fontFamily: 'GothamBold',
   },
   inactiveTab: {
-    color: '#000000',
+    color: '#000',
     paddingBottom: 5,
     fontFamily: 'GothamMedium',
   },
   communityItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF',
-    borderRadius: 12, // slightly larger
-    paddingHorizontal: 14, // increased
-    paddingVertical: 10, // increased
-    marginBottom: 14, // slightly increased
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 14,
     marginRight: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
+    backgroundColor: '#fff',
   },
   communityImage: {
-    width: 50, // increased
-    height: 50, // increased
+    width: 56,
+    height: 56,
     borderRadius: 25,
     borderWidth: 1,
     borderColor: GOLD,
     marginRight: 14,
   },
-  communityDetails: { flex: 1 },
+  communityDetails: { 
+    flex: 1 
+  },
   communityTitle: { 
-    fontSize: 14, // increased
+    fontSize: 14,
     color: '#000', 
-    fontFamily: 'GothamBold' 
+    fontFamily: 'GothamMedium' 
   },
   communityDescription: { 
-    fontSize: 13, // slightly larger
+    fontSize: 13,
     color: '#555', 
     marginTop: 3, 
     fontFamily: 'GothamRegular' 
   },
+  memberCount: {
+    fontSize: 12,
+    color: GOLD,
+    marginTop: 3,
+    fontFamily: 'GothamRegular',
+  },
   noCommunitiesText: { 
     textAlign: 'center', 
     color: '#888', 
-    marginTop: 18, // slightly more spacing
-    fontSize: 13, // slightly larger
+    marginTop: 18,
+    fontSize: 13,
     fontFamily: 'GothamRegular',
+  },
+  errorContainer: {
+    alignItems: 'center',
+    marginBottom: 12,
   },
   errorText: { 
     textAlign: 'center', 
     color: 'red', 
-    marginBottom: 12, // slightly more spacing
+    marginBottom: 8,
+    fontSize: 13,
     fontFamily: 'GothamRegular',
   },
 });

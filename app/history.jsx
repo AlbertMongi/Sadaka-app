@@ -37,7 +37,6 @@ export default function TransactionHistory() {
     const fetchTransactions = async () => {
       try {
         setLoading(true);
-
         const token = await AsyncStorage.getItem('userToken');
         if (!token) {
           Alert.alert('Error', 'No token found.');
@@ -69,12 +68,11 @@ export default function TransactionHistory() {
               month: dateObj.toLocaleString('default', { month: 'short' }),
               title: 'Contribution',
               type: 'Credit',
-              anim: new Animated.Value(0), // Animation value for each card
+              anim: new Animated.Value(0),
             };
           });
           setTransactions(mapped);
 
-          // Animate cards with staggered effect
           mapped.forEach((item, index) => {
             Animated.timing(item.anim, {
               toValue: 1,
@@ -95,7 +93,6 @@ export default function TransactionHistory() {
 
     fetchTransactions();
 
-    // Animate header fade-in
     Animated.timing(headerFadeAnim, {
       toValue: 1,
       duration: 600,
@@ -105,14 +102,12 @@ export default function TransactionHistory() {
 
   useEffect(() => {
     if (selectedTxn) {
-      // Animate modal slide-up
       Animated.timing(modalSlideAnim, {
         toValue: 0,
         duration: 400,
         useNativeDriver: true,
       }).start();
     } else {
-      // Reset modal position
       modalSlideAnim.setValue(SCREEN_HEIGHT);
     }
   }, [selectedTxn]);
@@ -159,7 +154,7 @@ export default function TransactionHistory() {
   return (
     <SafeAreaView style={styles.safeContainer}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} // VOW behaviour
         style={{ flex: 1 }}
       >
         <View style={styles.container}>
@@ -213,23 +208,35 @@ export default function TransactionHistory() {
                     <Ionicons name="close" size={24} color={GOLD} />
                   </TouchableOpacity>
                 </View>
-                <Text style={styles.modalLabel}>Purpose</Text>
-                <Text style={styles.modalText}>{selectedTxn?.purpose}</Text>
-                <Text style={styles.modalLabel}>Status</Text>
-                <Text style={styles.modalText}>{selectedTxn?.status}</Text>
-                <Text style={styles.modalLabel}>Amount</Text>
-                <Text
-                  style={[
-                    styles.modalText,
-                    { color: selectedTxn?.amount >= 0 ? '#0a8a00' : '#d32f2f' },
-                  ]}
-                >
-                  {selectedTxn?.amount >= 0 ? '+' : '-'}Tz{Math.abs(selectedTxn?.amount)}
-                </Text>
-                <Text style={styles.modalLabel}>Date</Text>
-                <Text style={styles.modalText}>
-                  {selectedTxn?.date} {selectedTxn?.month}
-                </Text>
+
+                <View style={styles.detailBox}>
+                  <Text style={styles.modalLabel}>Purpose</Text>
+                  <Text style={styles.modalText}>{selectedTxn?.purpose}</Text>
+                </View>
+
+                <View style={styles.detailBox}>
+                  <Text style={styles.modalLabel}>Status</Text>
+                  <Text style={styles.modalText}>{selectedTxn?.status}</Text>
+                </View>
+
+                <View style={styles.detailBox}>
+                  <Text style={styles.modalLabel}>Amount</Text>
+                  <Text
+                    style={[
+                      styles.modalText,
+                      { color: selectedTxn?.amount >= 0 ? '#0a8a00' : '#d32f2f' },
+                    ]}
+                  >
+                    {selectedTxn?.amount >= 0 ? '+' : '-'}Tz{Math.abs(selectedTxn?.amount)}
+                  </Text>
+                </View>
+
+                <View style={styles.detailBox}>
+                  <Text style={styles.modalLabel}>Date</Text>
+                  <Text style={styles.modalText}>
+                    {selectedTxn?.date} {selectedTxn?.month}
+                  </Text>
+                </View>
               </Animated.View>
             </Pressable>
           </Modal>
@@ -259,6 +266,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#000',
+    fontFamily: 'Gotham-Bold',
   },
   searchContainer: {
     flexDirection: 'row',
@@ -278,12 +286,14 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     color: '#000',
+    fontFamily: 'Gotham-Regular',
   },
   noResults: {
     textAlign: 'center',
     marginTop: 24,
     color: '#999',
     fontSize: 13,
+    fontFamily: 'Gotham-Medium',
   },
   card: {
     marginBottom: 12,
@@ -294,11 +304,11 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 12,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    elevation: 3,
+    // shadowColor: '#000',
+    // shadowOffset: { width: 0, height: 1 },
+    // shadowOpacity: 0.12,
+    // shadowRadius: 6,
+    // elevation: 3,
   },
   dateBadge: {
     backgroundColor: GOLD,
@@ -314,11 +324,13 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontSize: 18,
+    fontFamily: 'Gotham-Bold',
   },
   monthText: {
     color: '#fff',
     fontSize: 12,
     marginTop: 2,
+    fontFamily: 'Gotham-Medium',
   },
   info: {
     flex: 1,
@@ -328,22 +340,26 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#000',
     marginBottom: 4,
+    fontFamily: 'Gotham-Medium',
   },
   description: {
     fontSize: 13,
     color: '#555',
     marginBottom: 4,
+    fontFamily: 'Gotham-Regular',
   },
   type: {
     fontSize: 11,
     color: '#666',
     fontStyle: 'italic',
+    fontFamily: 'Gotham-Medium',
   },
   status: {
     fontSize: 11,
     color: GOLD,
     fontWeight: '600',
     marginTop: 2,
+    fontFamily: 'Gotham-Bold',
   },
   amountContainer: {
     minWidth: 70,
@@ -352,6 +368,7 @@ const styles = StyleSheet.create({
   amount: {
     fontWeight: '700',
     fontSize: 16,
+    fontFamily: 'Gotham-Bold',
   },
   modalOverlay: {
     flex: 1,
@@ -375,16 +392,26 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     color: GOLD,
+    fontFamily: 'Gotham-Bold',
+  },
+  detailBox: {
+    marginBottom: 12,
+    backgroundColor: '#FAFAFA',
+    padding: 12,
+    borderRadius: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: GOLD,
   },
   modalLabel: {
     fontWeight: '600',
     fontSize: 14,
-    marginTop: 10,
+    marginBottom: 4,
     color: '#333',
+    fontFamily: 'Gotham-Medium',
   },
   modalText: {
     fontSize: 14,
     color: '#555',
-    marginTop: 4,
+    fontFamily: 'Gotham-Regular',
   },
 });

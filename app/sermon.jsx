@@ -13,9 +13,10 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import { Share } from 'react-native';
 import { BASE_URL } from './apiConfig'; // ✅ Adjust path as needed
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const GOLD = '#FF8C00';
 const FALLBACK_IMAGE = 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTb_oySS2-AZYC97VkAwMB1NKY1Wm1qHy_CeQ&s';
 
@@ -25,16 +26,24 @@ export default function SermonDetailScreen() {
 
   const [sermon, setSermon] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isLiked, setIsLiked] = useState(false);
+  const [likeCount, setLikeCount] = useState(0);
   const scrollY = React.useRef(new Animated.Value(0)).current;
   const dropUpAnim = React.useRef(new Animated.Value(SCREEN_HEIGHT)).current;
 
-  async function fetchWithToken(url) {
+  async function fetchWithToken(url, options = {}) {
     try {
       const token = await AsyncStorage.getItem('userToken');
       if (!token) throw new Error('No token found');
 
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      };
+
       const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
+        ...options,
+        headers,
       });
 
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
@@ -55,7 +64,16 @@ export default function SermonDetailScreen() {
       setLoading(false);
     };
 
+    const loadLikes = async () => {
+      const res = await fetchWithToken(`${BASE_URL}/likes?sermon_id=${id}`);
+      if (res?.success && res.data) {
+        setIsLiked(res.data.liked);
+        setLikeCount(res.data.count);
+      }
+    };
+
     loadSermon();
+    loadLikes();
 
     // Animate drop-up
     Animated.timing(dropUpAnim, {
@@ -64,6 +82,38 @@ export default function SermonDetailScreen() {
       useNativeDriver: true,
     }).start();
   }, [id]);
+
+  const handleLike = async () => {
+    const previousLiked = isLiked;
+    const previousCount = likeCount;
+
+    setIsLiked(!isLiked);
+    setLikeCount(likeCount + (!isLiked ? 1 : -1));
+
+    const res = await fetchWithToken(`${BASE_URL}/likes/sermon/${id}`, {
+      method: 'POST',
+      body: JSON.stringify({ sermon_id: id }),
+    });
+
+    if (res?.success && res.data) {
+      setIsLiked(res.data.liked);
+      setLikeCount(res.data.count);
+    } else {
+      setIsLiked(previousLiked);
+      setLikeCount(previousCount);
+    }
+  };
+
+  const handleShare = async () => {
+    try {
+      await Share.share({
+        message: `Check out this sermon: ${sermon.name}\n\n${sermon.description || 'No description provided.'}`,
+        title: sermon.name,
+      });
+    } catch (error) {
+      console.error('Share error:', error);
+    }
+  };
 
   if (loading) {
     return (
@@ -120,6 +170,20 @@ export default function SermonDetailScreen() {
           <Text style={styles.infoText}>
             {sermon.description || 'No description provided.'}
           </Text>
+          <View style={styles.actionContainer}>
+            <TouchableOpacity style={styles.actionButton} onPress={handleLike}>
+              <Ionicons
+                name={isLiked ? 'heart' : 'heart-outline'}
+                size={24}
+                color={isLiked ? 'red' : GOLD}
+              />
+              <Text style={styles.actionText}>{likeCount}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
+              <Ionicons name="share-outline" size={24} color={GOLD} />
+              <Text style={styles.actionText}>Share</Text>
+            </TouchableOpacity>
+          </View>
         </Animated.View>
       </Animated.ScrollView>
     </View>
@@ -152,7 +216,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   imageContainer: {
-    width: '100%',
+    width: SCREEN_WIDTH,
     height: SCREEN_HEIGHT * 0.55,
     overflow: 'hidden',
   },
@@ -180,6 +244,23 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#333',
     lineHeight: 24,
+    fontFamily: 'GothamRegular',
+    marginBottom: 16,
+  },
+  actionContainer: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    marginTop: 16,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 24,
+  },
+  actionText: {
+    fontSize: 14,
+    color: '#333',
+    marginLeft: 8,
     fontFamily: 'GothamRegular',
   },
 });

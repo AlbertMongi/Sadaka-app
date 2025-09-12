@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   Animated,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -39,60 +40,57 @@ export default function EventsScreen() {
   const [activeTab, setActiveTab] = useState('my');
   const [allEvents, setAllEvents] = useState([]);
   const [myEvents, setMyEvents] = useState([]);
-  const [loading, setLoading] = useState(false);
-
-  // Animation states
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const eventAnims = useRef([]);
 
-  useEffect(() => {
-    const fetchEvents = async () => {
-      setLoading(true);
-      try {
-        const response = await fetch(`${BASE_URL}/events`);
-        const json = await response.json();
+  const fetchEvents = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${BASE_URL}/events`);
+      const json = await response.json();
 
-        if (json.success && Array.isArray(json.data)) {
-          const enriched = json.data.map((evt) => {
-            const { day, month, time } = formatDate(evt.eventDate);
-            const locationText = `${evt.street}, ${evt.district}, ${evt.region}`;
-            return {
-              id: evt.id,
-              title: evt.name,
-              description: evt.description,
-              location: locationText,
-              day,
-              month,
-              time,
-              image:
-                evt.imageUrl ||
-                'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTb_oySS2-AZYC97VkAwMB1NKY1Wm1qHy_CeQ&s',
-            };
-          });
+      if (json.success && Array.isArray(json.data)) {
+        const enriched = json.data.map((evt) => {
+          const { day, month, time } = formatDate(evt.eventDate);
+          const locationText = `${evt.street}, ${evt.district}, ${evt.region}`;
+          return {
+            id: evt.id,
+            title: evt.name,
+            description: evt.description,
+            location: locationText,
+            day,
+            month,
+            time,
+            image:
+              evt.imageUrl ||
+              'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTb_oySS2-AZYC97VkAwMB1NKY1Wm1qHy_CeQ&s',
+          };
+        });
 
-          setAllEvents(enriched);
-          setMyEvents(enriched.slice(0, 2));
-          // Initialize animations for events
-          eventAnims.current = enriched.map(() => ({
-            fade: new Animated.Value(0),
-            slide: new Animated.Value(30),
-            vowButton: new Animated.Value(1),
-          }));
-          animateEvents();
-        } else {
-          console.error('Invalid API response:', json);
-        }
-      } catch (err) {
-        console.error('Fetch error:', err);
-      } finally {
-        setLoading(false);
+        setAllEvents(enriched);
+        setMyEvents(enriched.slice(0, 2));
+        eventAnims.current = enriched.map(() => ({
+          fade: new Animated.Value(0),
+          slide: new Animated.Value(30),
+          vowButton: new Animated.Value(1),
+        }));
+        animateEvents();
+      } else {
+        console.error('Invalid API response:', json);
       }
-    };
+    } catch (err) {
+      console.error('Fetch error:', err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
+  useEffect(() => {
     fetchEvents();
-
-    // Animate page entry
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -110,7 +108,7 @@ export default function EventsScreen() {
   const animateEvents = () => {
     const animations = eventAnims.current.map((anim, index) =>
       Animated.sequence([
-        Animated.delay(index * 300), // Staggered delay for one-by-one effect
+        Animated.delay(index * 300),
         Animated.parallel([
           Animated.timing(anim.fade, {
             toValue: 1,
@@ -125,7 +123,6 @@ export default function EventsScreen() {
         ]),
       ])
     );
-
     Animated.parallel(animations).start();
   };
 
@@ -142,7 +139,6 @@ export default function EventsScreen() {
 
   const handleTabPress = (tab) => {
     setActiveTab(tab);
-    // Re-trigger animations when switching tabs
     eventAnims.current.forEach((anim) => {
       anim.fade.setValue(0);
       anim.slide.setValue(30);
@@ -151,7 +147,6 @@ export default function EventsScreen() {
   };
 
   const handleMakeVow = async (event, index) => {
-    // Animate button press
     Animated.sequence([
       Animated.timing(eventAnims.current[index].vowButton, {
         toValue: 0.9,
@@ -184,6 +179,11 @@ export default function EventsScreen() {
       console.error('Error saving vow:', error);
       Alert.alert('Error', 'Failed to save vow.');
     }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchEvents();
   };
 
   const renderEventCard = ({ item, index }) => (
@@ -224,6 +224,23 @@ export default function EventsScreen() {
     </Animated.View>
   );
 
+  const renderSkeletonCard = () => (
+    <View style={styles.card}>
+      <View style={styles.imageWrapper}>
+        <View style={[styles.image, { backgroundColor: '#e5e7eb' }]} />
+        <View style={styles.dateBadge}>
+          <View style={{ width: 20, height: 14, backgroundColor: '#e5e7eb', borderRadius: 2 }} />
+          <View style={{ width: 30, height: 10, backgroundColor: '#e5e7eb', borderRadius: 2, marginTop: 2 }} />
+        </View>
+      </View>
+      <View style={styles.info}>
+        <View style={{ width: '60%', height: 14, backgroundColor: '#e5e7eb', borderRadius: 4, marginBottom: 4 }} />
+        <View style={{ width: '40%', height: 12, backgroundColor: '#e5e7eb', borderRadius: 4, marginBottom: 2 }} />
+        <View style={{ width: '80%', height: 11, backgroundColor: '#e5e7eb', borderRadius: 4 }} />
+      </View>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.safeContainer}>
       <KeyboardAvoidingView
@@ -235,14 +252,13 @@ export default function EventsScreen() {
           <Animated.View style={{ opacity: fadeAnim }}>
             <View style={styles.header}>
               <TouchableOpacity>
-             
               </TouchableOpacity>
               <Text style={styles.headerText}>Events</Text>
               <TouchableOpacity
                 onPress={() => navigation.navigate('notification')}
                 style={styles.iconButton}
               >
-                <Ionicons name="notifications-outline" size={22} color={GOLD} />
+                
               </TouchableOpacity>
             </View>
           </Animated.View>
@@ -285,7 +301,13 @@ export default function EventsScreen() {
           {/* Event List */}
           <View style={{ flex: 1 }}>
             {loading ? (
-              <ActivityIndicator size="large" color={GOLD} style={{ marginTop: 20 }} />
+              <FlatList
+                data={[1, 2, 3]} // Render 3 skeleton cards
+                keyExtractor={(item) => `skeleton-${item}`}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 40, paddingTop: 8 }}
+                renderItem={renderSkeletonCard}
+              />
             ) : (
               <View style={{ flex: 1 }}>
                 {activeTab === 'my' ? (
@@ -296,6 +318,14 @@ export default function EventsScreen() {
                     contentContainerStyle={{ paddingBottom: 40, paddingTop: 8 }}
                     ListEmptyComponent={<Text style={styles.noResults}>No events found.</Text>}
                     renderItem={renderEventCard}
+                    refreshControl={
+                      <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        tintColor={GOLD}
+                        colors={[GOLD]}
+                      />
+                    }
                   />
                 ) : (
                   <FlatList
@@ -305,6 +335,14 @@ export default function EventsScreen() {
                     contentContainerStyle={{ paddingBottom: 40, paddingTop: 8 }}
                     ListEmptyComponent={<Text style={styles.noResults}>No events found.</Text>}
                     renderItem={renderEventCard}
+                    refreshControl={
+                      <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        tintColor={GOLD}
+                        colors={[GOLD]}
+                      />
+                    }
                   />
                 )}
               </View>
@@ -315,6 +353,7 @@ export default function EventsScreen() {
     </SafeAreaView>
   );
 }
+
 const styles = StyleSheet.create({
   safeContainer: { flex: 1, backgroundColor: '#fff' },
   container: { flex: 1, paddingHorizontal: 16, paddingTop: Platform.OS === 'ios' ? -100 : 30 },
@@ -327,7 +366,7 @@ const styles = StyleSheet.create({
   headerText: { 
     fontSize: 18, 
     color: '#222', 
-    fontFamily: 'GothamBold', // Changed to GothamBold
+    fontFamily: 'GothamBold',
   },
   iconButton: { padding: 6 },
   searchContainer: {
@@ -347,13 +386,13 @@ const styles = StyleSheet.create({
     fontSize: 14, 
     color: '#222', 
     paddingVertical: 0, 
-    fontFamily: 'GothamRegular', // GothamRegular for input
+    fontFamily: 'GothamRegular',
   },
   tabs: { flexDirection: 'row', justifyContent: 'center', marginBottom: 10 },
   tabText: { 
     fontSize: 14, 
     marginHorizontal: 16, 
-    fontFamily: 'GothamMedium', // GothamMedium for tabs
+    fontFamily: 'GothamMedium',
   },
   activeTab: { color: GOLD, borderBottomWidth: 2, borderColor: GOLD, paddingBottom: 4 },
   inactiveTab: { color: '#888', paddingBottom: 4 },
@@ -371,11 +410,6 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 14,
     alignItems: 'center',
-    // shadowColor: '#000',
-    // shadowOpacity: 0.08,
-    // shadowOffset: { width: 0, height: 2 },
-    // shadowRadius: 4,
-    // elevation: 2,
   },
   imageWrapper: {
     width: 110,
@@ -420,13 +454,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#1c1414',
     marginBottom: 4,
-    fontFamily: 'GothamMedium', // Use GothamMedium for titles
+    fontFamily: 'GothamMedium',
   },
   dateInline: {
     color: GOLD,
     fontSize: 12,
     marginBottom: 2,
-    fontFamily: 'GothamBold', // GothamBold for date
+    fontFamily: 'GothamBold',
   },
   location: {
     fontSize: 11,
